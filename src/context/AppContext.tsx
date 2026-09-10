@@ -41,6 +41,7 @@ interface AppContextType {
   toast: ToastState | null;
   templatesLoading: boolean;
   templatesError: string | null;
+  categoriesLoading: boolean;
 
   // Modal & Drawer states
   isAddModalOpen: boolean;
@@ -162,7 +163,10 @@ export const AppProvider: React.FC<{
   const currentUser = authenticatedPrincipal;
   const [users] = useState<User[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [templates, setTemplates] = useState<WidgetTemplate[]>([]);
+  const [myTemplates, setMyTemplates] = useState<WidgetTemplate[]>([]);
+  const [pendingTemplateApprovals, setPendingTemplateApprovals] = useState<WidgetTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [approvalRecords] = useState<ApprovalRecord[]>([]);
@@ -172,11 +176,13 @@ export const AppProvider: React.FC<{
   const [reports, setReports] = useState<ReportInstance[]>([]);
 
   const refreshCategories = async () => {
+    setCategoriesLoading(true);
     try {
       const data = await templateService.getCategories();
       setCategories(data);
     }
     catch (error: any) { console.warn('Failed to load Supabase categories:', error?.message ?? error); }
+    finally { setCategoriesLoading(false); }
   };
   useEffect(() => { void refreshTemplates(); void refreshCategories(); }, []);
 
@@ -361,8 +367,21 @@ export const AppProvider: React.FC<{
   const refreshTemplates = async () => {
     setTemplatesLoading(true); setTemplatesError(null);
     try {
-      const data = await templateService.getTemplates();
-      setTemplates(data);
+      if (isSupabasePrincipal(currentUser)) {
+        const [approved, owned, pending] = await Promise.all([
+          templateService.getTemplates(),
+          templateService.getMyTemplates(),
+          templateService.getPendingApprovals(),
+        ]);
+        setTemplates(approved);
+        setMyTemplates(owned);
+        setPendingTemplateApprovals(pending);
+      } else {
+        const data = await templateService.getTemplates();
+        setTemplates(data);
+        setMyTemplates(data.filter((template) => template.createdById === currentUser.id));
+        setPendingTemplateApprovals([]);
+      }
     } catch (err: any) {
       setTemplatesError(err.message || 'Unable to load report templates.');
       console.warn('Failed to refresh templates:', err.message);
@@ -680,13 +699,11 @@ export const AppProvider: React.FC<{
   ).size;
 
   const getPendingApprovalsForUser = () => {
-    return templates.filter(
-      (t) => t.status === 'Pending Approval' && t.requestedApprovalFromUserId === currentUser.id
-    );
+    return pendingTemplateApprovals.filter((template) => template.createdById !== currentUser.id);
   };
 
   const getMyRequestsForUser = () => {
-    return templates.filter((t) => t.createdById === currentUser.id);
+    return myTemplates.filter((t) => t.createdById === currentUser.id);
   };
 
   const getReportsAwaitingMyReview = () => {
@@ -716,6 +733,7 @@ export const AppProvider: React.FC<{
         toast,
         templatesLoading,
         templatesError,
+        categoriesLoading,
         isAddModalOpen,
         isChatDrawerOpen,
         draftToEdit,

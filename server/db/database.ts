@@ -8,7 +8,8 @@ import { runMigrations } from './migrations/migrationRunner.js';
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.resolve(moduleDir, './schema.sql');
 
-export const db = createDatabaseConnection(process.env.WIDGETFLOW_DB_PATH || defaultDatabasePath);
+const legacySqliteEnabled = process.env.LEGACY_SQLITE_ENABLED === 'true' || (process.env.NODE_ENV || 'development') !== 'production';
+export const db = createDatabaseConnection(legacySqliteEnabled ? (process.env.WIDGETFLOW_DB_PATH || defaultDatabasePath) : ':memory:');
 
 export function initializeDatabase(connection = db) {
   connection.exec(fs.readFileSync(schemaPath, 'utf8'));

@@ -11,6 +11,7 @@ import {
   Settings,
   History,
   ShieldCheck,
+  Database,
 } from 'lucide-react';
 import type { AdminViewType } from '../../types';
 
@@ -21,6 +22,7 @@ interface AdminSidebarProps {
 
 const ADMIN_NAV_ITEMS: Array<{ id: AdminViewType; label: string; icon: React.ReactNode }> = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
+  { id: 'data-control', label: 'Data Control Center', icon: <Database className="w-4 h-4" /> },
   { id: 'features', label: 'Feature Management', icon: <Sliders className="w-4 h-4" /> },
   { id: 'studio-config', label: 'Template Studio Configuration', icon: <LayoutTemplate className="w-4 h-4" /> },
   { id: 'packs', label: 'Pack Management', icon: <Package className="w-4 h-4" /> },

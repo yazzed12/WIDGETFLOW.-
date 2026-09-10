@@ -19,6 +19,8 @@ export class ApiError extends Error {
 }
 
 export async function authenticatedBinaryRequest(endpoint: string): Promise<{ blob: Blob; contentType: string | null }> {
+  const apiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+  const requestUrl = endpoint.startsWith('/api') && apiBase ? `${apiBase}${endpoint}` : endpoint;
   let accessToken: string | undefined;
   try {
     const { data } = await getSupabaseBrowserClient().auth.getSession();
@@ -28,7 +30,7 @@ export async function authenticatedBinaryRequest(endpoint: string): Promise<{ bl
   }
   const headers = new Headers();
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
-  const response = await fetch(endpoint, { method: 'GET', headers, credentials: 'include' });
+  const response = await fetch(requestUrl, { method: 'GET', headers, credentials: 'include' });
   if (!response.ok) {
     let message = `Request failed with status ${response.status}.`;
     let code = 'API_ERROR';
@@ -45,6 +47,8 @@ export async function authenticatedBinaryRequest(endpoint: string): Promise<{ bl
 }
 
 export async function httpRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const apiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+  const requestUrl = endpoint.startsWith('/api') && apiBase ? `${apiBase}${endpoint}` : endpoint;
   const headers = new Headers(options.headers);
   if (options.body !== undefined && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -70,7 +74,7 @@ export async function httpRequest<T>(endpoint: string, options: RequestInit = {}
 
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await fetch(requestUrl, {
       ...options,
       headers,
       credentials: 'include',
@@ -103,7 +107,7 @@ export async function httpRequest<T>(endpoint: string, options: RequestInit = {}
 
   if (import.meta.env.DEV) {
     console.info('[AUTH TRACE CLIENT RESPONSE]', {
-      endpoint,
+      endpoint: requestUrl,
       status: response.status,
       success: envelope.success === true,
       errorCode: envelope.error?.code,

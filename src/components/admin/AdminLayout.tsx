@@ -13,6 +13,7 @@ import { AdminCategories } from './AdminCategories';
 import { AdminSystemSettings } from './AdminSystemSettings';
 import { AdminAuditLog } from './AdminAuditLog';
 import { AdminRolesPermissions } from './AdminRolesPermissions';
+import { AdminDataControlCenter } from './AdminDataControlCenter';
 import type { AdminViewType } from '../../types';
 
 export const AdminLayout: React.FC = () => {
@@ -32,6 +33,7 @@ export const AdminLayout: React.FC = () => {
         {/* Admin Sub-View Router Container */}
         <main className="flex-1 overflow-y-auto bg-slate-50">
           {activeTab === 'overview' && <AdminOverview onNavigateTab={setActiveTab} />}
+          {activeTab === 'data-control' && <AdminDataControlCenter />}
           {activeTab === 'features' && <AdminFeatureManagement />}
           {activeTab === 'studio-config' && <AdminStudioConfig />}
           {activeTab === 'packs' && <AdminPackManagement />}

@@ -5,6 +5,7 @@ export type SecurityConfig = {
   isProduction: boolean;
   clientOrigins: string[];
   demoIdentityEnabled: boolean;
+  legacySqliteEnabled: boolean;
   sessionCookie: { name: string; secure: boolean; sameSite: SameSitePolicy };
 };
 
@@ -35,6 +36,7 @@ export function getSecurityConfig(overrides: Partial<Pick<SecurityConfig, 'nodeE
     demoIdentityEnabled: !isProduction && (
       overrides.demoIdentityEnabled ?? parseBoolean(process.env.DEMO_IDENTITY_ENABLED, false)
     ),
+    legacySqliteEnabled: !isProduction || parseBoolean(process.env.LEGACY_SQLITE_ENABLED, false),
     sessionCookie: { name: process.env.SESSION_COOKIE_NAME || (isProduction ? '__Host-widgetflow_session' : 'widgetflow_session'), secure, sameSite },
   };
 }

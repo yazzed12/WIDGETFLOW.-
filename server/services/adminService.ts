@@ -841,11 +841,11 @@ class AdminService {
     const items = Array.isArray(data.items) && data.items.length > 0
       ? data.items
       : structureComponents.map((component: any) => ({
-          sourceType: 'element',
-          sourceKey: `elements.${component.type || 'text'}`,
-          label: component.label || component.type || 'Component',
-          configuration: { component },
-        }));
+        sourceType: 'element',
+        sourceKey: `elements.${component.type || 'text'}`,
+        label: component.label || component.type || 'Component',
+        configuration: { component },
+      }));
     if (items.length === 0) {
       throw new Error('Add at least one component to the Pack canvas.');
     }
@@ -912,13 +912,13 @@ class AdminService {
     const replacementItems = Array.isArray(data.items) && data.items.length > 0
       ? data.items
       : data.structure !== undefined
-      ? structureComponents.map((component: any) => ({
+        ? structureComponents.map((component: any) => ({
           sourceType: 'element',
           sourceKey: `elements.${component.type || 'text'}`,
           label: component.label || component.type || 'Component',
           configuration: { component },
         }))
-      : undefined;
+        : undefined;
     if (replacementItems && replacementItems.length === 0) {
       throw new Error('Add at least one component to the Pack canvas.');
     }
@@ -1096,3 +1096,4 @@ class AdminService {
 }
 
 export const adminService = new AdminService();
+

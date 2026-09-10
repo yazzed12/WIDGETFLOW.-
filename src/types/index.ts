@@ -761,7 +761,7 @@ export interface Notification {
 
 export type ViewType = "dashboard" | "templates" | "my-requests" | "approvals" | "reports" | "notifications" | "engine-proof" | "admin";
 
-export type AdminViewType = "overview" | "features" | "studio-config" | "packs" | "elements" | "content-library" | "users" | "roles" | "categories" | "settings" | "audit";
+export type AdminViewType = "overview" | "data-control" | "features" | "studio-config" | "packs" | "elements" | "content-library" | "users" | "roles" | "categories" | "settings" | "audit";
 
 export interface OrganizationalRole {
   id: string;

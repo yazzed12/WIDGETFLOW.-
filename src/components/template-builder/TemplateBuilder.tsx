@@ -47,8 +47,9 @@ interface TemplateBuilderProps {
 }
 
 export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ initialTemplate, initialPack = null, mode = 'template', onSaveAdminPack, onPublishAdminPack, categoriesOverride, onClose }) => {
-  const { templates, categories: appCategories, currentUser, refreshTemplates, setActiveView, hasPermission } = useApp();
+  const { templates, categories: appCategories, categoriesLoading, currentUser, refreshTemplates, setActiveView, hasPermission } = useApp();
   const categories = categoriesOverride ?? appCategories;
+  const categoriesReady = Boolean(categoriesOverride) || !categoriesLoading;
   const { isFeatureEnabled, isElementEnabled } = useSystemConfig();
   const isAdminPackMode = mode === 'admin-pack';
   const allowedStudioTabs = new Set<StudioTab>([
@@ -155,6 +156,17 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ initialTemplat
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [activeDragItem, setActiveDragItem] = useState<any>(null);
   const [activeHelpType, setActiveHelpType] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAdminPackMode || !categoriesReady || !initialTemplate) return;
+    const categoryIsActive = categories.some(
+      (category) => category.id === templateState.categoryId && (category.status === undefined || category.status === 'Active')
+    );
+    if (!categoryIsActive && templateState.categoryId) {
+      setTemplateState((current) => ({ ...current, categoryId: '' }));
+      setBuilderError('The previous category for this template is no longer available. Please select an active category.');
+    }
+  }, [categoriesReady, categories, initialTemplate, isAdminPackMode, templateState.categoryId]);
 
   // Content Pack States
   // Personal/user Pack persistence is intentionally deferred until its own Supabase cutover.
@@ -717,6 +729,21 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ initialTemplat
   // Schema Validation Rules
   const validateBuilderSchema = (): boolean => {
     setBuilderError(null);
+    if (!categoriesReady) {
+      setBuilderError('Categories are still loading. Please wait before saving.');
+      return false;
+    }
+    if (!templateState.name.trim()) {
+      setBuilderError('Template name is required.');
+      return false;
+    }
+
+    const selectedCategory = categories.find((category) => category.id === templateState.categoryId);
+    if (!templateState.categoryId || !selectedCategory || (selectedCategory.status && selectedCategory.status !== 'Active')) {
+      setBuilderError('Please select an active template category before saving.');
+      return false;
+    }
+
     const issues = getBuilderValidationIssues(templateState);
     if (issues.length > 0) {
       const firstIssue = issues[0];
@@ -739,6 +766,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ initialTemplat
   // Save Draft API Call
   const handleSaveDraft = async () => {
     if (templateState.status === 'Approved') return;
+    if (!validateBuilderSchema()) return;
     try {
       setIsSaving(true);
       setBuilderError(null);
@@ -833,7 +861,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ initialTemplat
         onNameChange={(name) => {
           pushState({ ...templateState, name });
         }}
-        categoryId={templateState.categoryId || categories[0]?.id}
+        categoryId={templateState.categoryId || ''}
         onCategoryChange={(categoryId) => {
           pushState({ ...templateState, categoryId });
         }}

@@ -1,6 +1,5 @@
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
-import fs from 'fs';
 import { validateDynamicTemplateSchema } from './componentRegistry.js';
 import type { WidgetTemplate, TemplateComponent, TemplateSection } from '../../src/types/index.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -33,24 +32,20 @@ export const templateImportService = {
 
     try {
       if (ext === 'docx') {
-        const buffer = fs.readFileSync(file.path);
+        const buffer = file.buffer;
         return await this.analyzeDocx(buffer, filename);
       } else if (ext === 'xlsx' || ext === 'xls') {
-        const buffer = fs.readFileSync(file.path);
+        const buffer = file.buffer;
         return this.analyzeXlsx(buffer, filename);
       } else if (ext === 'json') {
-        const content = fs.readFileSync(file.path, 'utf-8');
+        const content = file.buffer.toString('utf8');
         return this.analyzeJson(content, filename);
       } else {
         throw new AppError('Unsupported file type. Please upload a DOCX, XLSX, or WidgetFlow JSON file.', 400, 'UNSUPPORTED_FORMAT');
       }
     } finally {
-      // Security: Always clean temporary uploaded file from disk immediately
-      if (file.path && fs.existsSync(file.path)) {
-        try {
-          fs.unlinkSync(file.path);
-        } catch {}
-      }
+      // Memory-backed uploads are released after this request; no persistent
+      // or temporary filesystem cleanup is required.
     }
   },
 

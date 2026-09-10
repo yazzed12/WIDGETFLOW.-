@@ -21,13 +21,21 @@ export function serializeTemplateDraft(template: WidgetTemplate): TemplateDraftP
     order,
     components: (template.components ?? template.fields ?? []).filter((component: any) => (component.section ?? title) === title),
   }));
+  let globalOrder = 0;
   return {
     id: template.id && !template.id.startsWith('tpl-') ? template.id : undefined,
     name: template.name,
     description: template.description ?? '',
     categoryId: template.categoryId,
     tags: template.tags ?? [],
-    sections: sections.map((section) => ({ ...section, components: section.components.map((component) => ({ ...component, key: component.key || component.id })) as TemplateComponent[] })),
+    sections: sections.map((section) => ({
+      ...section,
+      components: section.components.map((component) => ({
+        ...component,
+        key: component.key || component.id,
+        order: globalOrder++,
+      })) as TemplateComponent[],
+    })),
     rules: template.workflow?.rules ?? [],
     calculations: template.workflow?.calculations ?? [],
     theme: template.theme ?? {},

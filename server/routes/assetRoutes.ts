@@ -1,278 +1,85 @@
 import { Router } from 'express';
-import { db } from '../db/database.js';
+import crypto from 'node:crypto';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '../middleware/errorHandler.js';
-import fs from 'fs';
-import path from 'path';
 import { authorizationService } from '../services/authorizationService.js';
-import { resourceAccessService } from '../services/resourceAccessService.js';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceRoleClient } from '../services/supabaseServiceRoleClient.js';
 
 export const assetRouter = Router();
+const SIGNATURE_BUCKET = 'widgetflow-signatures';
+const GENERAL_BUCKET = String(process.env.SUPABASE_ASSET_BUCKET || '').trim();
+const MAX_ASSET_BYTES = 10 * 1024 * 1024;
 
-async function canonicalReportIdsForAsset(assetId: string, authorization?: string): Promise<string[]> {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
-  if (!authorization || !/^Bearer\s+.+$/i.test(authorization) || !url || !key) return [];
-  const client = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { headers: { Authorization: authorization } },
-  });
-  const { data, error } = await client
-    .from('report_values')
-    .select('report_id')
-    .filter('value->>attachmentId', 'eq', assetId);
-  if (error || !data?.length) return [];
-  const ids = [...new Set(data.map((row) => row.report_id))];
-  const { data: accessibleReports, error: accessError } = await client
-    .from('reports')
-    .select('id')
-    .in('id', ids);
-  if (accessError) return [];
-  return (accessibleReports || []).map((row) => row.id);
+function requireBearer(req: any): string {
+  const value = req.headers.authorization;
+  if (!value || !/^Bearer\s+.+$/i.test(value)) throw new AppError('Authentication is required.', 401, 'AUTHENTICATION_REQUIRED');
+  return value;
 }
-
-const UPLOADS_DIR = path.join(process.cwd(), 'server', 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+function requestClient(authorization: string): SupabaseClient {
+  const url = process.env.SUPABASE_URL; const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) throw new AppError('Supabase asset gateway is unavailable.', 503, 'SUPABASE_CONFIGURATION');
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { headers: { Authorization: authorization } } });
 }
-
+function decodeBase64(input: unknown): Buffer {
+  const raw = String(input || '').replace(/^data:[^;]+;base64,/, '');
+  if (!raw) throw new AppError('No asset data provided.', 400, 'ASSET_DATA_REQUIRED');
+  const bytes = Buffer.from(raw, 'base64');
+  if (!bytes.length) throw new AppError('Asset data is empty.', 400, 'ASSET_DATA_REQUIRED');
+  if (bytes.length > MAX_ASSET_BYTES) throw new AppError('File size exceeds maximum limit of 10MB.', 400, 'ASSET_TOO_LARGE');
+  return bytes;
+}
 export function verifySignatureImageBinary(buffer: Buffer, mimeType?: string): { valid: boolean; format?: string; error?: string } {
-  if (!buffer || buffer.length === 0) {
-    return { valid: false, error: 'Empty signature file data.' };
-  }
-  if (buffer.length > 5 * 1024 * 1024) {
-    return { valid: false, error: 'Signature file size exceeds maximum limit of 5MB.' };
-  }
-
-  // Reject SVG, XML, HTML, script tags
-  const headStr = buffer.slice(0, 512).toString('utf8', 0, Math.min(512, buffer.length)).toLowerCase();
-  if (headStr.includes('<svg') || headStr.includes('<?xml') || headStr.includes('<html') || headStr.includes('<script')) {
-    return { valid: false, error: 'Vector SVG, HTML, and script contents are strictly forbidden for signature images.' };
-  }
-
-  // PNG magic bytes: \x89PNG\r\n\x1a\n
-  if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47 && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a) {
-    // Dimension check for PNG if header is present
-    if (buffer.length >= 24) {
-      const width = buffer.readUInt32BE(16);
-      const height = buffer.readUInt32BE(20);
-      if (width < 100 || height < 30 || width > 3000 || height > 1500) {
-        return { valid: false, error: `Signature image dimensions (${width}x${height}) out of bounds (Min 100x30, Max 3000x1500).` };
-      }
-    }
-    return { valid: true, format: 'image/png' };
-  }
-
-  // JPEG magic bytes: \xFF\xD8\xFF
-  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-    return { valid: true, format: 'image/jpeg' };
-  }
-
-  // WebP magic bytes: RIFF....WEBP
-  if (buffer.length >= 12 && buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') {
-    return { valid: true, format: 'image/webp' };
-  }
-
-  return {
-    valid: false,
-    error: 'Binary image signature mismatch. File is not a genuine PNG, JPEG, or WebP image.',
-  };
+  if (!buffer?.length) return { valid: false, error: 'Empty signature file data.' };
+  if (buffer.length > 5 * 1024 * 1024) return { valid: false, error: 'Signature file size exceeds maximum limit of 5MB.' };
+  const declared = String(mimeType || '').toLowerCase(); const head = buffer.subarray(0, 512).toString('utf8').toLowerCase();
+  if (head.includes('<svg') || head.includes('<?xml') || head.includes('<html') || head.includes('<script')) return { valid: false, error: 'Vector SVG, HTML, and script contents are forbidden.' };
+  if (buffer.length >= 8 && buffer.readUInt32BE(0) === 0x89504e47 && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a) return { valid: !declared || declared === 'image/png', format: 'image/png', error: declared && declared !== 'image/png' ? 'Declared MIME does not match PNG.' : undefined };
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return { valid: !declared || declared === 'image/jpeg', format: 'image/jpeg', error: declared && declared !== 'image/jpeg' ? 'Declared MIME does not match JPEG.' : undefined };
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return { valid: !declared || declared === 'image/webp', format: 'image/webp', error: declared && declared !== 'image/webp' ? 'Declared MIME does not match WebP.' : undefined };
+  return { valid: false, error: 'Binary image signature mismatch.' };
 }
-
-// Signature Upload API Endpoint (Strict Binary Verification + Attestation)
-assetRouter.post('/signature-upload', (req, res, next) => {
-  try {
-    authorizationService.requirePermission((req as any).user, 'signature_profile.use');
-    const { filename, mimeType, base64Data, attestationAccepted } = req.body || {};
-
-    if (!attestationAccepted) {
-      throw new AppError('Explicit user attestation required: You must confirm that this image represents your own signature.', 400, 'ATTESTATION_REQUIRED');
-    }
-
-    if (!base64Data) {
-      throw new AppError('No signature image data provided.', 400);
-    }
-
-    const cleanBase64 = String(base64Data).replace(/^data:[^;]+;base64,/, '');
-    const buffer = Buffer.from(cleanBase64, 'base64');
-
-    const verifyRes = verifySignatureImageBinary(buffer, mimeType);
-    if (!verifyRes.valid) {
-      throw new AppError(verifyRes.error || 'Invalid signature image file.', 400, 'INVALID_SIGNATURE_IMAGE');
-    }
-
-    const assetId = `sigasset-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const ext = verifyRes.format === 'image/png' ? 'png' : verifyRes.format === 'image/jpeg' ? 'jpg' : 'webp';
-    const diskFilename = `${assetId}.${ext}`;
-    const filePath = path.join(UPLOADS_DIR, diskFilename);
-
-    fs.writeFileSync(filePath, buffer);
-
-    db.prepare(`
-      INSERT INTO template_assets (id, filename, mime_type, size_bytes, storage_path, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(assetId, filename || diskFilename, verifyRes.format, buffer.length, filePath, (req as any).user!.id);
-
-    res.json({
-      success: true,
-      data: {
-        id: assetId,
-        filename: filename || diskFilename,
-        mimeType: verifyRes.format,
-        url: `/api/assets/${assetId}`,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-function handleGeneralAssetUpload(requiredPermissions: Parameters<typeof authorizationService.requireAnyPermission>[1]) {
-  return (req: any, res: any, next: any) => {
-  try {
-    if (process.env.NODE_ENV !== 'production') console.info('[AUTH TRACE SERVER]', {
-      assetPermissionCheck: true,
-      reqUserIdPresent: Boolean(req.user?.id),
-      reqUserRoleKey: req.user?.roleKey,
-      reqUserPermissionCount: Array.isArray(req.user?.permissions) ? req.user.permissions.length : 0,
-      reqUserHasReportsCreate: Array.isArray(req.user?.permissions) && req.user.permissions.includes('reports.create'),
-      reqUserHasReportsEditDraft: Array.isArray(req.user?.permissions) && req.user.permissions.includes('reports.edit_draft'),
-      requiredPermissions,
-    });
-    authorizationService.requireAnyPermission(req.user, requiredPermissions);
-    const { filename, mimeType, base64Data } = req.body;
-
-    if (!base64Data) {
-      throw new AppError('No asset data provided.', 400);
-    }
-
-    const allowedMimeTypes = [
-      'image/png',
-      'image/jpeg',
-      'image/jpg',
-      'image/webp',
-      'application/msword',
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/plain',
-      'text/csv',
-    ];
-    const targetMime = mimeType || 'application/octet-stream';
-
-    if (!allowedMimeTypes.includes(targetMime)) {
-      throw new AppError(
-        'Unsupported file format. Allowed formats: PDF, DOCX, XLSX, TXT, CSV, PNG, JPEG, WebP (SVG and executable scripts disabled for security).',
-        400
-      );
-    }
-
-    const assetId = `asset-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    let ext = 'bin';
-    if (targetMime.includes('pdf')) ext = 'pdf';
-    else if (targetMime === 'application/msword') ext = 'doc';
-    else if (targetMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') ext = 'docx';
-    else if (targetMime.includes('sheet')) ext = 'xlsx';
-    else if (targetMime.includes('png')) ext = 'png';
-    else if (targetMime.includes('jpeg') || targetMime.includes('jpg')) ext = 'jpg';
-    else if (targetMime.includes('webp')) ext = 'webp';
-    else if (targetMime.includes('csv')) ext = 'csv';
-    else if (targetMime.includes('text')) ext = 'txt';
-
-    const diskFilename = `${assetId}.${ext}`;
-    const filePath = path.join(UPLOADS_DIR, diskFilename);
-
-    // Strip base64 prefix if present
-    const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
-    const buffer = Buffer.from(cleanBase64, 'base64');
-
-    if (buffer.length > 10 * 1024 * 1024) {
-      throw new AppError('File size exceeds maximum limit of 10MB.', 400);
-    }
-
-    fs.writeFileSync(filePath, buffer);
-
-    db.prepare(`
-      INSERT INTO template_assets (id, filename, mime_type, size_bytes, storage_path, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(assetId, filename || diskFilename, targetMime, buffer.length, filePath, (req as any).user!.id);
-
-    res.json({
-      success: true,
-      data: {
-        id: assetId,
-        filename: filename || diskFilename,
-        mimeType: targetMime,
-        url: `/api/assets/${assetId}`,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-  };
+function extensionForMime(mime: string): string {
+  if (mime === 'application/pdf') return 'pdf'; if (mime === 'application/msword') return 'doc'; if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx'; if (mime === 'image/png') return 'png'; if (mime === 'image/jpeg' || mime === 'image/jpg') return 'jpg'; if (mime === 'image/webp') return 'webp'; return 'bin';
 }
-
-// Report attachment upload: report permissions remain unchanged.
-assetRouter.post('/upload', handleGeneralAssetUpload(['reports.create', 'reports.edit_draft']));
-
-// Template image/logo upload: use template workflow permissions.
-assetRouter.post('/template-upload', handleGeneralAssetUpload(['templates.create', 'templates.edit_draft']));
-
-// Stream Stored Asset API Endpoint
-assetRouter.get('/:id', async (req, res, next) => {
+function bucketForPurpose(purpose: string): string { if (purpose === 'signature_profile') return SIGNATURE_BUCKET; if (!GENERAL_BUCKET) throw new AppError('Supabase asset bucket is not configured.', 503, 'SUPABASE_ASSET_BUCKET_REQUIRED'); return GENERAL_BUCKET; }
+async function insertMetadata(client: SupabaseClient, args: { bucket: string; objectPath: string; purpose: string; user: any; filename: string; mime: string; bytes: Buffer; linkedReportId?: string; linkedTemplateId?: string }) {
+  const { data, error } = await client.from('asset_metadata').insert({ bucket_name: args.bucket, object_path: args.objectPath, asset_purpose: args.purpose, owner_user_id: args.user.id, owner_name_snapshot: args.user.name || args.user.email || args.user.id, owner_role_key_snapshot: args.user.roleKey || 'unknown', linked_report_id: args.linkedReportId || null, linked_template_id: args.linkedTemplateId || null, original_filename: args.filename, mime_type: args.mime, byte_size: args.bytes.length, content_hash: crypto.createHash('sha256').update(args.bytes).digest('hex'), lifecycle_state: 'active', metadata: {} }).select('*').single();
+  if (error || !data) throw new AppError('Asset metadata registration failed.', 502, 'ASSET_METADATA_WRITE_FAILED'); return data;
+}
+async function uploadCanonical(req: any, purpose: 'report_attachment' | 'template_asset' | 'signature_profile', permissions: string[]) {
+  const authorization = requireBearer(req); authorizationService.requireAnyPermission(req.user, permissions as any); const body = req.body || {}; const bytes = decodeBase64(body.base64Data); const mime = String(body.mimeType || 'application/octet-stream').toLowerCase();
+  const allowed = purpose === 'signature_profile' ? ['image/png', 'image/jpeg', 'image/webp'] : ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/msword', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  if (!allowed.includes(mime)) throw new AppError('Unsupported file format.', 400, 'UNSUPPORTED_FILE_TYPE');
+  const bucket = bucketForPurpose(purpose); const assetId = crypto.randomUUID(); const objectPath = `${purpose}/${req.user.id}/${assetId}.${extensionForMime(mime)}`; const storage = createServiceRoleClient();
+  const { error: uploadError } = await storage.storage.from(bucket).upload(objectPath, bytes, { contentType: mime, upsert: false });
+  if (uploadError) throw new AppError('Asset storage upload failed.', 502, 'ASSET_STORAGE_WRITE_FAILED');
+  try { const metadata = await insertMetadata(storage, { bucket, objectPath, purpose, user: req.user, filename: String(body.filename || `${assetId}.${extensionForMime(mime)}`), mime, bytes, linkedReportId: body.linkedReportId, linkedTemplateId: body.linkedTemplateId }); return { id: metadata.id, filename: metadata.original_filename, mimeType: metadata.mime_type, url: `/api/assets/${metadata.id}` }; } catch (error) { await storage.storage.from(bucket).remove([objectPath]); throw error; }
+}
+assetRouter.post('/upload', async (req, res, next) => { try { res.json({ success: true, data: await uploadCanonical(req, 'report_attachment', ['reports.create', 'reports.edit_draft']) }); } catch (e) { next(e); } });
+assetRouter.post('/template-upload', async (req, res, next) => { try { res.json({ success: true, data: await uploadCanonical(req, 'template_asset', ['templates.create', 'templates.edit_draft']) }); } catch (e) { next(e); } });
+assetRouter.post('/signature-upload', async (req, res, next) => { try {
+  if (!req.body?.attestationAccepted) throw new AppError('Explicit user attestation required.', 400, 'ATTESTATION_REQUIRED');
+  const authorization = requireBearer(req); authorizationService.requirePermission(req.user, 'signature_profile.use');
+  const bytes = decodeBase64(req.body?.base64Data); const check = verifySignatureImageBinary(bytes, req.body?.mimeType);
+  if (!check.valid || check.format !== 'image/png') throw new AppError(check.error || 'Signature uploads must be PNG images.', 400, 'INVALID_SIGNATURE_IMAGE');
+  const objectPath = `signatures/${req.user.id}/${crypto.randomUUID()}.png`; const client = requestClient(authorization);
+  const { error: uploadError } = await client.storage.from(SIGNATURE_BUCKET).upload(objectPath, bytes, { contentType: 'image/png', upsert: false });
+  if (uploadError) throw new AppError('Signature asset storage upload failed.', 502, 'ASSET_STORAGE_WRITE_FAILED');
   try {
-    const assetId = req.params.id;
-    const asset = db.prepare(`SELECT * FROM template_assets WHERE id = ?`).get(assetId) as any;
-
-    if (!asset) {
-      throw new AppError('Asset record not found.', 404, 'ASSET_NOT_FOUND');
-    }
-
-    // Access control for private signature assets
-    const isSignatureAsset = asset.id.startsWith('sigasset-') || asset.filename.includes('sigasset');
-    if (isSignatureAsset) {
-      const callerId = (req as any).user?.id;
-      if (!callerId) {
-        throw new AppError('Authentication required to view private signature assets.', 401, 'UNAUTHORIZED');
-      }
-
-      if (asset.created_by !== callerId && asset.created_by !== 'system') {
-        const reportParticipant = db.prepare(`
-          SELECT COUNT(*) as count FROM report_signature_audit s
-          JOIN reports r ON s.report_id = r.id
-          WHERE (s.signature_data_url LIKE ? OR s.signature_data_url LIKE ?)
-            AND (r.created_by = ? OR r.sent_to_user_id = ?)
-        `).get(`%${assetId}%`, `%${asset.filename}%`, callerId, callerId) as any;
-
-        const canViewOrganization = authorizationService.hasPermission(callerId, 'reports.view_organization');
-
-        if ((!reportParticipant || reportParticipant.count === 0) && !canViewOrganization) {
-          throw new AppError('Forbidden: Access to private user signature asset denied.', 403, 'FORBIDDEN');
-        }
-      }
-    } else {
-      const caller = (req as any).user;
-      if (!caller) throw new AppError('Authentication required to view report attachments.', 401, 'UNAUTHORIZED');
-      const linkedReports = db.prepare(`
-        SELECT DISTINCT r.id, r.created_by as createdById, r.sent_to_user_id as sentToId
-        FROM reports r
-        JOIN report_field_values rfv ON rfv.report_id = r.id
-        WHERE rfv.value_text LIKE ?
-      `).all(`%${assetId}%`) as any[];
-      const canonicalReportIds = await canonicalReportIdsForAsset(assetId, req.headers.authorization);
-      const isAssetCreator = asset.created_by === caller.id;
-      const canView = isAssetCreator || linkedReports.some((report) => resourceAccessService.canAccessReport(caller, report)) || canonicalReportIds.length > 0;
-      if (!canView) throw new AppError('Forbidden: Access to report attachment denied.', 403, 'FORBIDDEN');
-    }
-
-    const resolvedPath = path.resolve(asset.storage_path);
-    if (!resolvedPath.startsWith(UPLOADS_DIR) || !fs.existsSync(resolvedPath)) {
-      throw new AppError('Asset file not found or unauthorized path.', 404);
-    }
-
-    res.setHeader('Content-Type', asset.mime_type);
-    fs.createReadStream(resolvedPath).pipe(res);
-  } catch (err) {
-    next(err);
+    const { data: assetId, error: registerError } = await client.rpc('register_my_signature_asset', { p_object_path: objectPath, p_original_filename: String(req.body?.filename || 'signature.png'), p_byte_size: bytes.length, p_content_hash: crypto.createHash('sha256').update(bytes).digest('hex'), p_extraction_version: 'signature_extract_v1' });
+    if (registerError || !assetId) throw new AppError('Signature asset registration failed.', 502, 'ASSET_METADATA_WRITE_FAILED');
+    res.json({ success: true, data: { id: assetId, filename: String(req.body?.filename || 'signature.png'), mimeType: 'image/png', url: `/api/assets/${assetId}` } });
+  } catch (error) { await client.storage.from(SIGNATURE_BUCKET).remove([objectPath]); throw error; }
+} catch (e) { next(e); } });
+assetRouter.get('/:id', async (req, res, next) => { try {
+  const authorization = requireBearer(req); const caller = req.user; const client = requestClient(authorization); const metadataClient = createServiceRoleClient(); const { data: asset, error } = await metadataClient.from('asset_metadata').select('*').eq('id', req.params.id).eq('lifecycle_state', 'active').maybeSingle();
+  if (error || !asset) throw new AppError('Asset record not found.', 404, 'ASSET_NOT_FOUND'); let allowed = asset.owner_user_id === caller?.id;
+  if (asset.linked_report_id) { const { data } = await client.from('reports').select('id').eq('id', asset.linked_report_id).maybeSingle(); allowed ||= Boolean(data); }
+  if (!asset.linked_report_id && asset.asset_purpose === 'report_attachment') {
+    const { data: values } = await client.from('report_values').select('report_id').filter('value->>attachmentId', 'eq', asset.id);
+    for (const value of values || []) { const { data: report } = await client.from('reports').select('id').eq('id', value.report_id).maybeSingle(); if (report) { allowed = true; break; } }
   }
-});
+  if (asset.linked_template_id) { const { data } = await client.from('templates').select('id').eq('id', asset.linked_template_id).maybeSingle(); allowed ||= Boolean(data); }
+  if (asset.asset_purpose === 'signature_profile' && asset.owner_user_id !== caller?.id) { const { data } = await client.from('report_signature_events').select('report_id').eq('signature_asset_id', asset.id).limit(1); if (data?.length) { const { data: report } = await client.from('reports').select('id').eq('id', data[0].report_id).maybeSingle(); allowed ||= Boolean(report); } }
+  if (!allowed) throw new AppError('Forbidden: access to asset denied.', 403, 'FORBIDDEN'); const storage = createServiceRoleClient(); const { data: file, error: downloadError } = await storage.storage.from(asset.bucket_name).download(asset.object_path); if (downloadError || !file) throw new AppError('Asset file is unavailable.', 404, 'ASSET_FILE_NOT_FOUND'); res.setHeader('Content-Type', asset.mime_type); res.setHeader('Content-Length', String(asset.byte_size)); res.end(Buffer.from(await file.arrayBuffer()));
+} catch (e) { next(e); } });

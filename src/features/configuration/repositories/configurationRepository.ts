@@ -91,7 +91,7 @@ export const configurationRepository = {
       client.from('governance_routes').select('*').eq('is_active', true),
       client.from('roles').select('*').eq('is_active', true),
       client.from('role_permissions').select('role_id,permission_key'),
-      client.from('profiles').select('id,profile_code,full_name,email,department,role_id,status').eq('status', 'Active'),
+      client.from('profiles').select('id,auth_user_id,profile_code,full_name,email,department,role_id,status').eq('status', 'Active').not('auth_user_id', 'is', null),
     ]);
     const routes = requireData(routeResult.data, routeResult.error) as Row[];
     const roles = requireData(roleResult.data, roleResult.error) as Row[];

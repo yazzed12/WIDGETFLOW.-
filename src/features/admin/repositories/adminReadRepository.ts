@@ -58,7 +58,7 @@ export const adminReadRepository = {
       client.from('roles').select('*').order('name'),
       client.from('permissions').select('*').order('group_key').order('label'),
       client.from('role_permissions').select('role_id,permission_key'),
-      client.from('profiles').select('role_id,status'),
+      client.from('profiles').select('role_id,status,auth_user_id'),
     ]);
     const roleRows = requireData(roleResult.data, roleResult.error) as Row[];
     const permissionRows = requireData(permissionResult.data, permissionResult.error) as Row[];
@@ -74,7 +74,7 @@ export const adminReadRepository = {
     const activeUserCountsByRole = new Map<string, number>();
     for (const profile of profiles) {
       userCountsByRole.set(profile.role_id, (userCountsByRole.get(profile.role_id) ?? 0) + 1);
-      if (profile.status === 'Active') {
+      if (profile.status === 'Active' && profile.auth_user_id) {
         activeUserCountsByRole.set(profile.role_id, (activeUserCountsByRole.get(profile.role_id) ?? 0) + 1);
       }
     }
@@ -97,7 +97,7 @@ export const adminReadRepository = {
   async users(): Promise<User[]> {
     const client = getSupabaseBrowserClient();
     const [profilesResult, rolesResult] = await Promise.all([
-      client.from('profiles').select('*').order('full_name'),
+      client.from('profiles').select('*').eq('status', 'Active').not('auth_user_id', 'is', null).order('full_name'),
       client.from('roles').select('*'),
     ]);
     const profiles = requireData(profilesResult.data, profilesResult.error) as Row[];

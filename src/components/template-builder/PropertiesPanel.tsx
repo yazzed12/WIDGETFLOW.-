@@ -794,7 +794,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               const reader = new FileReader();
               reader.onload = async () => {
                 const base64Data = reader.result as string;
-                const data = await apiService.uploadTemplateAsset({ filename: file.name, mimeType: file.type, base64Data });
+                const data = await apiService.uploadTemplateAsset({ filename: file.name, mimeType: file.type, base64Data, linkedTemplateId: templateState.id });
                 if (data) {
                   onUpdateComponent({
                     ...selectedComponent,

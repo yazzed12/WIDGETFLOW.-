@@ -197,7 +197,7 @@ export const apiService = {
     });
   },
 
-  async uploadTemplateAsset(payload: { filename?: string; mimeType?: string; base64Data: string }): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
+  async uploadTemplateAsset(payload: { filename?: string; mimeType?: string; base64Data: string; linkedTemplateId?: string }): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
     return request<{ id: string; url: string; filename?: string; mimeType?: string }>('/api/assets/template-upload', {
       method: 'POST',
       body: JSON.stringify(payload),

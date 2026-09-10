@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { RequestCommentThread } from './RequestCommentThread';
 import { ApproveConfirmModal } from './ApproveConfirmModal';
 import { RejectModal } from './RejectModal';
+import { DynamicTemplateRenderer } from '../dynamic-template/DynamicTemplateRenderer';
 import { X, CheckCircle2, XCircle, Clock, Sparkles, User as UserIcon, Calendar, FileText } from 'lucide-react';
 
 interface ApprovalDetailDrawerProps {
@@ -46,97 +47,6 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
   };
 
 
-
-  const renderWidgetPreview = () => {
-    switch (template.categoryId) {
-      case 'cat-finance':
-        return (
-          <div className="bg-slate-900 text-white rounded-xl p-4 border border-slate-800 space-y-3">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-semibold uppercase">Finance Telemetry</span>
-              <span className="text-emerald-400 font-bold">● Active MRR Sync</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-slate-800 p-2.5 rounded border border-slate-700">
-                <div className="text-[10px] text-slate-400">Monthly Revenue</div>
-                <div className="text-base font-bold text-emerald-400">$248,500</div>
-              </div>
-              <div className="bg-slate-800 p-2.5 rounded border border-slate-700">
-                <div className="text-[10px] text-slate-400">Variance</div>
-                <div className="text-base font-bold text-white">- 2.4%</div>
-              </div>
-            </div>
-          </div>
-        );
-      case 'cat-hr':
-        return (
-          <div className="bg-slate-900 text-white rounded-xl p-4 border border-slate-800 space-y-3">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-semibold uppercase">Operations & Headcount</span>
-              <span className="text-blue-400 font-bold">● 142 Active Members</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="bg-slate-800 p-2 rounded border border-slate-700">
-                <div className="text-[9px] text-slate-400">In Office</div>
-                <div className="font-bold text-blue-400">86</div>
-              </div>
-              <div className="bg-slate-800 p-2 rounded border border-slate-700">
-                <div className="text-[9px] text-slate-400">Remote</div>
-                <div className="font-bold text-indigo-400">48</div>
-              </div>
-              <div className="bg-slate-800 p-2 rounded border border-slate-700">
-                <div className="text-[9px] text-slate-400">Leave</div>
-                <div className="font-bold text-amber-400">8</div>
-              </div>
-            </div>
-          </div>
-        );
-      case 'cat-analytics':
-        return (
-          <div className="bg-slate-900 text-white rounded-xl p-4 border border-slate-800 space-y-3">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-semibold uppercase">Funnel Analytics</span>
-              <span className="text-purple-400 font-bold">● 28% Conversion</span>
-            </div>
-            <div className="space-y-1.5 text-[11px]">
-              <div className="flex justify-between bg-slate-800 p-2 rounded border border-slate-700">
-                <span>Landing Page Visits</span>
-                <span className="font-bold text-white">45,200</span>
-              </div>
-              <div className="flex justify-between bg-slate-800 p-2 rounded border border-slate-700">
-                <span>Registrations</span>
-                <span className="font-bold text-purple-300">12,650</span>
-              </div>
-            </div>
-          </div>
-        );
-      case 'cat-devtools':
-        return (
-          <div className="bg-slate-900 text-white rounded-xl p-4 border border-slate-800 space-y-3">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-semibold uppercase">DevOps Telemetry</span>
-              <span className="text-emerald-400 font-bold">● 99.98% Uptime</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-slate-800 p-2.5 rounded border border-slate-700">
-                <div className="text-[9px] text-slate-400">p95 Latency</div>
-                <div className="font-bold text-emerald-400">14 ms</div>
-              </div>
-              <div className="bg-slate-800 p-2.5 rounded border border-slate-700">
-                <div className="text-[9px] text-slate-400">Error Rate</div>
-                <div className="font-bold text-white">0.012%</div>
-              </div>
-            </div>
-          </div>
-        );
-      default:
-        return (
-          <div className="bg-slate-900 text-white rounded-xl p-4 border border-slate-800 text-center text-xs text-slate-400">
-            Widget Structure Layout Preview
-          </div>
-        );
-    }
-  };
 
   return (
     <>
@@ -206,7 +116,11 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
                 <Sparkles className="w-4 h-4 text-indigo-600" />
                 Widget Visual Layout Preview
               </h3>
-              {renderWidgetPreview()}
+              <DynamicTemplateRenderer
+                template={template}
+                values={{}}
+                mode="readOnly"
+              />
             </div>
 
             {/* Audit History Timeline */}
