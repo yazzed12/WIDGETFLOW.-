@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Edit3, KeyRound, ShieldPlus, UserPlus, Use
 import { adminService } from '../../features/admin/services/adminService';
 import type { EmploymentStatus, OrganizationalRole, User } from '../../types';
 import { AdminInfoTooltip } from './AdminInfoTooltip';
+import { normalizeError } from '../../lib/errors/errorHandling';
 
 type UserEditor = { name: string; email: string; department: string; roleId: string; status: EmploymentStatus };
 
@@ -28,6 +29,8 @@ export const AdminUsersAccess: React.FC = () => {
   const [resetPassword, setResetPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -102,10 +105,14 @@ export const AdminUsersAccess: React.FC = () => {
 
   const handleCreateUserSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setEmailError(null);
+    setPasswordError(null);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUserEmail.trim())) { setEmailError('Please enter a valid email address.'); setModalError(null); return; }
     if (!newUserName.trim() || !newUserEmail.trim() || !newUserDept.trim() || !newUserPassword) {
       setModalError('Name, email, initial password, and department are required.');
       return;
     }
+    if (newUserPassword.length < 12 || newUserPassword.length > 128 || newUserPassword.trim().length === 0) { setPasswordError('Password must be between 12 and 128 characters.'); setModalError(null); return; }
     if (createAdminMode && !confirmAdminCreation) {
       setModalError('Confirm that this account will receive protected Admin access.');
       return;
@@ -128,7 +135,7 @@ export const AdminUsersAccess: React.FC = () => {
       setNewUserPassword('');
       setConfirmAdminCreation(false);
     } catch (err: any) {
-      setModalError(err.message || 'Unable to create user.');
+      const safe = normalizeError(err); if (safe.field === 'email') setEmailError(safe.message); else if (safe.field === 'password') setPasswordError(safe.message); else setModalError(safe.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -242,8 +249,8 @@ export const AdminUsersAccess: React.FC = () => {
             {modalError && <div className="p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold">{modalError}</div>}
             <form onSubmit={handleCreateUserSubmit} className="space-y-4 text-xs">
               <label className="block space-y-1"><span className="font-bold text-slate-700">Full Name *</span><input value={newUserName} onChange={(event) => setNewUserName(event.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-300" required /></label>
-              <label className="block space-y-1"><span className="font-bold text-slate-700">Email Address *</span><input type="email" value={newUserEmail} onChange={(event) => setNewUserEmail(event.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-300" required /></label>
-              <label className="block space-y-1"><span className="font-bold text-slate-700">Initial Password *</span><input type="password" autoComplete="new-password" value={newUserPassword} onChange={(event) => setNewUserPassword(event.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-300" required /></label>
+              <label className="block space-y-1"><span className="font-bold text-slate-700">Email Address *</span><input type="email" value={newUserEmail} onChange={(event) => { setNewUserEmail(event.target.value); setEmailError(null); }} className={`w-full px-3 py-2 rounded-xl border ${emailError ? 'border-rose-400' : 'border-slate-300'}`} aria-invalid={Boolean(emailError)} required />{emailError && <span className="text-[11px] text-rose-600">{emailError}</span>}</label>
+              <label className="block space-y-1"><span className="font-bold text-slate-700">Initial Password *</span><input type="password" autoComplete="new-password" value={newUserPassword} onChange={(event) => { setNewUserPassword(event.target.value); setPasswordError(null); }} className={`w-full px-3 py-2 rounded-xl border ${passwordError ? 'border-rose-400' : 'border-slate-300'}`} aria-invalid={Boolean(passwordError)} required />{passwordError && <span className="text-[11px] text-rose-600">{passwordError}</span>}</label>
               <div className="grid grid-cols-2 gap-4">{!createAdminMode && <label className="block space-y-1"><span className="font-bold text-slate-700">Role *</span><select value={newUserRoleId} onChange={(event) => setNewUserRoleId(event.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white">{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>}<label className="block space-y-1"><span className="font-bold text-slate-700">Department *</span><input value={newUserDept} onChange={(event) => setNewUserDept(event.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-300" required /></label></div>
               {!createAdminMode && <label className="block space-y-1"><span className="font-bold text-slate-700">Manager (optional)</span><select value={newUserManagerId} onChange={(event) => setNewUserManagerId(event.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"><option value="">No manager</option>{users.filter((user) => user.status === 'Active').map((user) => <option key={user.id} value={user.id}>{user.name} — {user.role}</option>)}</select></label>}
               {createAdminMode && <label className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900"><input type="checkbox" checked={confirmAdminCreation} onChange={(event) => setConfirmAdminCreation(event.target.checked)} /><span className="font-semibold">I confirm this creates a protected Admin with platform administration authority.</span></label>}

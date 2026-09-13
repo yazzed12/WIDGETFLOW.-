@@ -1,0 +1,3 @@
+import fs from 'node:fs'; import assert from 'node:assert/strict';
+const mapper=fs.readFileSync('src/lib/errors/errorHandling.ts','utf8'); const users=fs.readFileSync('src/components/admin/AdminUsersAccess.tsx','utf8'); const repo=fs.readFileSync('src/features/admin/repositories/adminMutationRepository.ts','utf8');
+assert.match(mapper,/Please enter a valid email address/); assert.match(mapper,/EMAIL_ALREADY_EXISTS/); assert.match(mapper,/SESSION_EXPIRED/); assert.match(users,/emailError/); assert.match(users,/normalizeError/); assert.match(repo,/new AppError/); console.log('phase2a error handling static checks passed');

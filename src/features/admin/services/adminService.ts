@@ -1,5 +1,6 @@
 import { adminReadRepository } from '../repositories/adminReadRepository';
 import { adminMutationRepository } from '../repositories/adminMutationRepository';
+import { normalizeError } from '../../../lib/errors/errorHandling';
 
 const FRIENDLY_ERRORS: Record<string, string> = {
   ADMIN_REQUIRED: 'An active protected Admin is required.',
@@ -32,9 +33,14 @@ const FRIENDLY_ERRORS: Record<string, string> = {
 
 async function safe<T>(operation: () => Promise<T>): Promise<T> {
   try { return await operation(); } catch (error) {
-    const message = error instanceof Error ? error.message : 'The operation could not be completed.';
-    const match = Object.entries(FRIENDLY_ERRORS).find(([code]) => message.includes(code));
-    if (match) throw new Error(match[1]);
+    const rawMessage = error instanceof Error ? error.message : '';
+    const existing = Object.values(FRIENDLY_ERRORS).find((value) => value === rawMessage);
+    if (existing) throw new Error(existing);
+    const normalized = normalizeError(error);
+    const message = normalized.message;
+    const match = Object.entries(FRIENDLY_ERRORS).find(([code]) => normalized.code === code || message.includes(code));
+    if (match && !['INVALID_EMAIL', 'INVALID_PASSWORD'].includes(normalized.code)) throw new Error(match[1]);
+    if (normalized.code === 'INVALID_EMAIL' || normalized.code === 'INVALID_PASSWORD') throw normalized;
     if (Object.values(FRIENDLY_ERRORS).includes(message)) throw new Error(message);
     throw new Error('The operation could not be completed. Please retry.');
   }

@@ -1,4 +1,5 @@
 import { getSupabaseBrowserClient } from '../../../lib/supabase/client';
+import { AppError } from '../../../lib/errors/errorHandling';
 
 type RpcArgs = Record<string, unknown>;
 
@@ -10,18 +11,20 @@ async function invoke(functionName: string, body: Record<string, unknown>): Prom
   const { data, error } = await getSupabaseBrowserClient().functions.invoke(functionName, { body });
   if (error) {
     let message = error.message;
+    let code = (error as any).code;
     const context = (error as { context?: unknown }).context;
     if (context instanceof Response) {
       try {
         const payload = await context.clone().json();
-        message = payload?.error?.code || payload?.error?.message || message;
+        code = payload?.error?.code || code;
+        message = payload?.error?.message || message;
       } catch {
         // The Edge Function still returned a safe generic SDK error.
       }
     }
-    throw new Error(message);
+    throw new AppError(String(code ?? 'UNKNOWN').toUpperCase() as any, message);
   }
-  if (!data?.success) throw new Error(data?.error?.code || data?.error?.message || 'The operation could not be completed.');
+  if (!data?.success) throw new AppError(String(data?.error?.code || 'UNKNOWN').toUpperCase() as any, String(data?.error?.message || 'The operation could not be completed.'));
   return data.data;
 }
 
