@@ -9,7 +9,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { WidgetTemplate, Category, ImportProposal } from '../../types';
-import { apiService } from '../../services/apiService';
+import { analyzeTemplateImportInBrowser } from '../../services/templateImportBrowser';
 
 interface StudioWelcomeModalProps {
   templates: WidgetTemplate[];
@@ -43,10 +43,7 @@ export const StudioWelcomeModal: React.FC<StudioWelcomeModalProps> = ({
     setImportError(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', importFile);
-
-      const data = await apiService.analyzeTemplateImport(formData);
+      const data = await analyzeTemplateImportInBrowser(importFile);
       onImportProposalReady(data);
     } catch (err: any) {
       setImportError(err.message || 'Import failed. Please try a different DOCX, XLSX, or JSON file.');

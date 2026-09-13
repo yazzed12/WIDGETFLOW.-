@@ -1,4 +1,3 @@
-import { httpRequest } from '../../../services/httpClient';
 import { getSupabaseBrowserClient } from '../../../lib/supabase/client';
 
 export interface AssetCleanupResult {
@@ -71,7 +70,11 @@ export const adminDataControlService = {
     p_options: options,
   }),
   previewFactoryReset: (options: Record<string, unknown> = {}) => rpc<Record<string, unknown>>('admin_preview_factory_reset', { p_options: options }),
-  executeFactoryReset: (confirmation: string, options: Record<string, unknown> = {}) => httpRequest<Record<string, unknown>>('/api/admin/data-control/system-reset', { method: 'POST', body: JSON.stringify({ confirmation, options }) }),
+  executeFactoryReset: async (confirmation: string, options: Record<string, unknown> = {}) => {
+    const { data, error } = await getSupabaseBrowserClient().functions.invoke('admin-factory-reset', { body: { confirmation, options } });
+    if (error) throw new Error(error.message);
+    return ((data as any)?.data ?? data) as Record<string, unknown>;
+  },
   previewAssetCleanup: (assetIds: string[]) => rpc<unknown[]>('admin_preview_asset_cleanup', { p_asset_ids: assetIds }),
   previewAccountCleanup: (userId: string, categories: string[]) => rpc<Record<string, unknown>>('admin_preview_account_data_cleanup', { p_user_id: userId, p_categories: categories }),
   executeAccountCleanup: (userId: string, categories: string[], confirmation: string, options: Record<string, unknown> = {}) => rpc<Record<string, unknown>>('admin_execute_account_data_cleanup', { p_user_id: userId, p_categories: categories, p_confirmation: confirmation, p_options: options }),
@@ -81,10 +84,9 @@ export const adminDataControlService = {
     p_options: options,
     p_confirmation: confirmation,
   }),
-  cleanupAssets(assetIds: string[], confirmation: string): Promise<AssetCleanupResult> {
-    return httpRequest<AssetCleanupResult>('/api/admin/data-control/assets/cleanup', {
-      method: 'POST',
-      body: JSON.stringify({ assetIds, confirmation }),
-    });
+  async cleanupAssets(assetIds: string[], confirmation: string): Promise<AssetCleanupResult> {
+    const { data, error } = await getSupabaseBrowserClient().functions.invoke('asset-gateway', { body: { action: 'cleanup', assetIds, confirmation } });
+    if (error) throw new Error(error.message);
+    return ((data as any)?.data ?? data) as AssetCleanupResult;
   },
 };

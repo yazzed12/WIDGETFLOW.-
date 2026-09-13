@@ -58,4 +58,14 @@ export const reportRepository = {
     const { data, error } = await getSupabaseBrowserClient().from('notifications').select('*').eq('recipient_user_id', userId).order('created_at', { ascending: false });
     return required(data, error) as any[];
   },
+  async markMyNotificationRead(notificationId: string) {
+    const { data, error } = await getSupabaseBrowserClient().rpc('mark_my_notification_read', { p_notification_id: notificationId });
+    return required(data, error) as any;
+  },
+  async markMyNotificationsRead() {
+    const { data, error } = await getSupabaseBrowserClient().rpc('mark_my_notifications_read');
+    return required(data, error) as any;
+  },
+  async listReportComments(reportId: string) { const { data, error } = await getSupabaseBrowserClient().rpc('list_report_comments', { p_report_id: reportId }); return required(data, error) as any[]; },
+  async addReportComment(reportId: string, message: string) { const { data, error } = await getSupabaseBrowserClient().rpc('add_report_comment', { p_report_id: reportId, p_message: message }); return required(data, error) as any[]; },
 };

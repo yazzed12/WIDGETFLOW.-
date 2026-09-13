@@ -190,18 +190,22 @@ export const apiService = {
   },
 
   // Assets Upload
-  async uploadAsset(payload: { filename?: string; mimeType?: string; base64Data: string }): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
-    return request<{ id: string; url: string; filename?: string; mimeType?: string }>('/api/assets/upload', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+  async uploadAsset(payload: { filename?: string; mimeType?: string; base64Data: string; purpose?: string; linkedReportId?: string }): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
+    const { data, error } = await (await import('../lib/supabase/client')).getSupabaseBrowserClient().functions.invoke('asset-gateway', { body: payload });
+    if (error) throw error;
+    return ((data as any)?.data ?? data) as any;
+  },
+
+  async linkReportAsset(assetId: string, reportId: string): Promise<void> {
+    const { data, error } = await (await import('../lib/supabase/client')).getSupabaseBrowserClient().functions.invoke('asset-gateway', { body: { action: 'link-report-asset', assetId, reportId } });
+    if (error) throw error;
+    if ((data as any)?.success === false) throw new Error((data as any)?.error?.message || 'Attachment linking failed.');
   },
 
   async uploadTemplateAsset(payload: { filename?: string; mimeType?: string; base64Data: string; linkedTemplateId?: string }): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
-    return request<{ id: string; url: string; filename?: string; mimeType?: string }>('/api/assets/template-upload', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    const { data, error } = await (await import('../lib/supabase/client')).getSupabaseBrowserClient().functions.invoke('asset-gateway', { body: { ...payload, purpose: 'template_asset' } });
+    if (error) throw error;
+    return ((data as any)?.data ?? data) as any;
   },
 
   async analyzeTemplateImport(formData: FormData): Promise<any> {

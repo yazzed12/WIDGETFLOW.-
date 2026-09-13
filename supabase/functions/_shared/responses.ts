@@ -32,98 +32,314 @@ export class ApiError extends Error {
   }
 }
 
-const SAFE_DATABASE_ERRORS: Record<string, [number, ErrorCode, string]> = {
-  ADMIN_REQUIRED: [403, 'ADMIN_REQUIRED', 'An active protected Admin is required.'],
-  TARGET_NOT_FOUND: [404, 'TARGET_NOT_FOUND', 'The target account was not found.'],
-  TARGET_AUTH_USER_NOT_FOUND: [404, 'TARGET_NOT_FOUND', 'The target Auth account was not found.'],
-  ROLE_NOT_FOUND: [404, 'ROLE_NOT_FOUND', 'The requested role was not found.'],
-  ROLE_INACTIVE: [409, 'ROLE_INACTIVE', 'The requested role is inactive.'],
-  PROTECTED_ADMIN: [409, 'PROTECTED_ADMIN', 'Protected Admin accounts require a dedicated lifecycle operation.'],
-  LAST_ACTIVE_ADMIN: [409, 'LAST_ACTIVE_ADMIN', 'The last active protected Admin cannot be changed.'],
-  GOVERNANCE_REVIEWER_DEPENDENCY: [409, 'GOVERNANCE_REVIEWER_DEPENDENCY', 'This account is required by a specific-user governance route.'],
-  GOVERNANCE_ROLE_QUEUE_EMPTY: [409, 'GOVERNANCE_ROLE_QUEUE_EMPTY', 'This change would leave a governance role queue without an eligible reviewer.'],
-  EMAIL_ALREADY_EXISTS: [409, 'EMAIL_ALREADY_EXISTS', 'An account already uses this email address.'],
-  INVALID_INPUT: [400, 'INVALID_INPUT', 'The request is invalid.'],
-  MANAGER_NOT_ACTIVE: [409, 'INVALID_INPUT', 'The selected manager is not active.'],
-  AUTH_EMAIL_MISMATCH: [409, 'ACCOUNT_CREATE_FAILED', 'The Auth and profile email values did not match.'],
-  REPORT_NOT_VISIBLE: [403, 'FORBIDDEN', 'The report or signature asset is not available.'],
-  SIGNATURE_ASSET_NOT_REFERENCED_BY_REPORT: [404, 'TARGET_NOT_FOUND', 'The signature asset was not found.'],
-  SIGNATURE_ASSET_NOT_FOUND: [404, 'TARGET_NOT_FOUND', 'The signature asset was not found.'],
-  PROTECTED_ADMIN_ROLE_INVALID: [500, 'INTERNAL_ERROR', 'The protected Admin role is unavailable.'],
+const SAFE_DATABASE_ERRORS: Record<
+  string,
+  [number, ErrorCode, string]
+> = {
+  ADMIN_REQUIRED: [
+    403,
+    'ADMIN_REQUIRED',
+    'An active protected Admin is required.',
+  ],
+
+  TARGET_NOT_FOUND: [
+    404,
+    'TARGET_NOT_FOUND',
+    'The target account was not found.',
+  ],
+
+  TARGET_AUTH_USER_NOT_FOUND: [
+    404,
+    'TARGET_NOT_FOUND',
+    'The target Auth account was not found.',
+  ],
+
+  ROLE_NOT_FOUND: [
+    404,
+    'ROLE_NOT_FOUND',
+    'The requested role was not found.',
+  ],
+
+  ROLE_INACTIVE: [
+    409,
+    'ROLE_INACTIVE',
+    'The requested role is inactive.',
+  ],
+
+  PROTECTED_ADMIN: [
+    409,
+    'PROTECTED_ADMIN',
+    'Protected Admin accounts require a dedicated lifecycle operation.',
+  ],
+
+  LAST_ACTIVE_ADMIN: [
+    409,
+    'LAST_ACTIVE_ADMIN',
+    'The last active protected Admin cannot be changed.',
+  ],
+
+  GOVERNANCE_REVIEWER_DEPENDENCY: [
+    409,
+    'GOVERNANCE_REVIEWER_DEPENDENCY',
+    'This account is required by a specific-user governance route.',
+  ],
+
+  GOVERNANCE_ROLE_QUEUE_EMPTY: [
+    409,
+    'GOVERNANCE_ROLE_QUEUE_EMPTY',
+    'This change would leave a governance role queue without an eligible reviewer.',
+  ],
+
+  EMAIL_ALREADY_EXISTS: [
+    409,
+    'EMAIL_ALREADY_EXISTS',
+    'An account already uses this email address.',
+  ],
+
+  INVALID_INPUT: [
+    400,
+    'INVALID_INPUT',
+    'The request is invalid.',
+  ],
+
+  MANAGER_NOT_ACTIVE: [
+    409,
+    'INVALID_INPUT',
+    'The selected manager is not active.',
+  ],
+
+  AUTH_EMAIL_MISMATCH: [
+    409,
+    'ACCOUNT_CREATE_FAILED',
+    'The Auth and profile email values did not match.',
+  ],
+
+  REPORT_NOT_VISIBLE: [
+    403,
+    'FORBIDDEN',
+    'The report or signature asset is not available.',
+  ],
+
+  SIGNATURE_ASSET_NOT_REFERENCED_BY_REPORT: [
+    404,
+    'TARGET_NOT_FOUND',
+    'The signature asset was not found.',
+  ],
+
+  SIGNATURE_ASSET_NOT_FOUND: [
+    404,
+    'TARGET_NOT_FOUND',
+    'The signature asset was not found.',
+  ],
+
+  PROTECTED_ADMIN_ROLE_INVALID: [
+    500,
+    'INTERNAL_ERROR',
+    'The protected Admin role is unavailable.',
+  ],
 };
 
 function allowedOrigins(): Set<string> {
-  const configured = Deno.env.get('WIDGETFLOW_ALLOWED_ORIGINS') ??
+  const configured =
+    Deno.env.get('WIDGETFLOW_ALLOWED_ORIGINS') ??
     'http://localhost:5173,http://127.0.0.1:5173';
-  return new Set(configured.split(',').map((value) => value.trim()).filter(Boolean));
+
+  return new Set(
+    configured
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 }
 
-function corsHeaders(request: Request): HeadersInit {
-  const origin = request.headers.get('origin');
-  if (origin && !allowedOrigins().has(origin)) {
-    throw new ApiError(403, 'ORIGIN_NOT_ALLOWED', 'This origin is not allowed.');
+export function corsHeaders(
+  request: Request,
+): HeadersInit {
+  const origin =
+    request.headers.get('origin');
+
+  if (
+    origin &&
+    !allowedOrigins().has(origin)
+  ) {
+    throw new ApiError(
+      403,
+      'ORIGIN_NOT_ALLOWED',
+      'This origin is not allowed.',
+    );
   }
 
   return {
-    ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
-    'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Max-Age': '600',
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
+    ...(origin
+      ? {
+          'Access-Control-Allow-Origin':
+            origin,
+          Vary: 'Origin',
+        }
+      : {}),
+
+    'Access-Control-Allow-Headers':
+      'authorization, apikey, content-type, x-client-info',
+
+    /*
+     * GET is required by asset-gateway protected downloads.
+     */
+    'Access-Control-Allow-Methods':
+      'GET, POST, OPTIONS',
+
+    'Access-Control-Max-Age':
+      '600',
+
+    'Content-Type':
+      'application/json; charset=utf-8',
+
+    'Cache-Control':
+      'no-store',
   };
 }
 
-export function preflight(request: Request): Response | null {
-  if (request.method !== 'OPTIONS') return null;
-  return new Response(null, { status: 204, headers: corsHeaders(request) });
+export function preflight(
+  request: Request,
+): Response | null {
+  if (request.method !== 'OPTIONS') {
+    return null;
+  }
+
+  return new Response(
+    null,
+    {
+      status: 204,
+      headers: corsHeaders(request),
+    },
+  );
 }
 
-export function requirePost(request: Request): void {
+export function requirePost(
+  request: Request,
+): void {
   if (request.method !== 'POST') {
-    throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Only POST is supported.');
+    throw new ApiError(
+      405,
+      'METHOD_NOT_ALLOWED',
+      'Only POST is supported.',
+    );
   }
 }
 
-export function success(request: Request, data: unknown, status = 200): Response {
-  return new Response(JSON.stringify({ success: true, data }), {
-    status,
-    headers: corsHeaders(request),
-  });
+export function success(
+  request: Request,
+  data: unknown,
+  status = 200,
+): Response {
+  return new Response(
+    JSON.stringify({
+      success: true,
+      data,
+    }),
+    {
+      status,
+      headers: corsHeaders(request),
+    },
+  );
 }
 
-export function databaseError(error: { message?: string } | null): ApiError {
-  const message = error?.message ?? '';
-  for (const [databaseCode, [status, code, safeMessage]] of Object.entries(SAFE_DATABASE_ERRORS)) {
-    if (message.includes(databaseCode)) return new ApiError(status, code, safeMessage);
+export function databaseError(
+  error: { message?: string } | null,
+): ApiError {
+  const message =
+    error?.message ?? '';
+
+  for (
+    const [
+      databaseCode,
+      [
+        status,
+        code,
+        safeMessage,
+      ],
+    ] of Object.entries(
+      SAFE_DATABASE_ERRORS,
+    )
+  ) {
+    if (
+      message.includes(databaseCode)
+    ) {
+      return new ApiError(
+        status,
+        code,
+        safeMessage,
+      );
+    }
   }
-  return new ApiError(500, 'INTERNAL_ERROR', 'The operation could not be completed.');
+
+  return new ApiError(
+    500,
+    'INTERNAL_ERROR',
+    'The operation could not be completed.',
+  );
 }
 
-export function failure(request: Request, error: unknown): Response {
-  let safe = error instanceof ApiError
-    ? error
-    : new ApiError(500, 'INTERNAL_ERROR', 'The operation could not be completed.');
+export function failure(
+  request: Request,
+  error: unknown,
+): Response {
+  let safe =
+    error instanceof ApiError
+      ? error
+      : new ApiError(
+          500,
+          'INTERNAL_ERROR',
+          'The operation could not be completed.',
+        );
 
   try {
-    return new Response(JSON.stringify({
-      success: false,
-      error: {
-        code: safe.code,
-        message: safe.message,
-        ...(safe.details ? { details: safe.details } : {}),
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: safe.code,
+          message: safe.message,
+          ...(safe.details
+            ? {
+                details:
+                  safe.details,
+              }
+            : {}),
+        },
+      }),
+      {
+        status: safe.status,
+        headers:
+          corsHeaders(request),
       },
-    }), { status: safe.status, headers: corsHeaders(request) });
+    );
   } catch (corsError) {
-    safe = corsError instanceof ApiError
-      ? corsError
-      : new ApiError(403, 'ORIGIN_NOT_ALLOWED', 'This origin is not allowed.');
-    return new Response(JSON.stringify({
-      success: false,
-      error: { code: safe.code, message: safe.message },
-    }), {
-      status: safe.status,
-      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-    });
+    safe =
+      corsError instanceof ApiError
+        ? corsError
+        : new ApiError(
+            403,
+            'ORIGIN_NOT_ALLOWED',
+            'This origin is not allowed.',
+          );
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: safe.code,
+          message: safe.message,
+        },
+      }),
+      {
+        status: safe.status,
+        headers: {
+          'Content-Type':
+            'application/json; charset=utf-8',
+          'Cache-Control':
+            'no-store',
+        },
+      },
+    );
   }
 }

@@ -19,8 +19,11 @@ export class ApiError extends Error {
 }
 
 export async function authenticatedBinaryRequest(endpoint: string): Promise<{ blob: Blob; contentType: string | null }> {
-  const apiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
-  const requestUrl = endpoint.startsWith('/api') && apiBase ? `${apiBase}${endpoint}` : endpoint;
+  const apiBase = import.meta.env.DEV ? String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '') : '';
+  const assetMatch = endpoint.match(/^\/api\/assets\/([^/?#]+)$/);
+  const requestUrl = assetMatch
+    ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, '')}/functions/v1/asset-gateway/${assetMatch[1]}`
+    : endpoint.startsWith('/api') && apiBase ? `${apiBase}${endpoint}` : endpoint;
   let accessToken: string | undefined;
   try {
     const { data } = await getSupabaseBrowserClient().auth.getSession();
@@ -47,7 +50,7 @@ export async function authenticatedBinaryRequest(endpoint: string): Promise<{ bl
 }
 
 export async function httpRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const apiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+  const apiBase = import.meta.env.DEV ? String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '') : '';
   const requestUrl = endpoint.startsWith('/api') && apiBase ? `${apiBase}${endpoint}` : endpoint;
   const headers = new Headers(options.headers);
   if (options.body !== undefined && !(options.body instanceof FormData) && !headers.has('Content-Type')) {

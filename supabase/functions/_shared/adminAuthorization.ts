@@ -12,6 +12,7 @@ export type AuthorizedAdmin = {
   principal: AdminPrincipal;
   authUser: User;
   adminClient: SupabaseClient;
+  userClient: SupabaseClient;
 };
 
 type PrincipalRow = {
@@ -54,5 +55,6 @@ export async function requireProtectedAdmin(request: Request): Promise<Authorize
     },
     authUser: verified.user,
     adminClient: verified.adminClient,
+    userClient: verified.userClient,
   };
 }

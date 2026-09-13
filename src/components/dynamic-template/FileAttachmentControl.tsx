@@ -12,6 +12,7 @@ interface FileAttachmentControlProps {
   onChange?: (key: string, val: any) => void;
   disabled?: boolean;
   error?: string;
+  reportId?: string;
 }
 
 export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
@@ -21,6 +22,7 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
   onChange,
   disabled,
   error,
+  reportId,
 }) => {
   const fieldKey = getReportBusinessFieldKey(component) || '';
   const fileConfig = component.fileConfig || {};
@@ -135,6 +137,7 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
             filename: file.name,
             mimeType: mime || 'application/octet-stream',
             base64Data,
+            ...(reportId ? { linkedReportId: reportId, purpose: 'report_attachment' } : { purpose: 'report_attachment' }),
           });
           if (json) {
             const payload = {

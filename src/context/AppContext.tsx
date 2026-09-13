@@ -210,9 +210,12 @@ export const AppProvider: React.FC<{
 
   const markNotificationRead = async (id: string) => {
     if (isSupabasePrincipal(currentUser)) {
-      // Migration 042 grants SELECT only. Keep the interaction local until a
-      // Supabase read-state RPC/policy is introduced; never call legacy API.
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      try {
+        const updatedNotifs = await reportService.markNotificationRead(id, currentUser.id);
+        setNotifications(updatedNotifs);
+      } catch {
+        showToast('Unable to mark notification as read.', 'warning');
+      }
       return;
     }
     try {
@@ -227,8 +230,13 @@ export const AppProvider: React.FC<{
 
   const markAllNotificationsRead = async () => {
     if (isSupabasePrincipal(currentUser)) {
-      setNotifications((prev) => prev.map((n) => (n.userId === currentUser.id ? { ...n, read: true } : n)));
-      showToast('Notifications marked as read locally; sync is not yet available.', 'info');
+      try {
+        const updatedNotifs = await reportService.markAllNotificationsRead(currentUser.id);
+        setNotifications(updatedNotifs);
+        showToast('All notifications marked as read', 'success');
+      } catch {
+        showToast('Unable to mark notifications as read.', 'warning');
+      }
       return;
     }
     try {
@@ -525,6 +533,8 @@ export const AppProvider: React.FC<{
 
     try {
       const newReport = await reportService.create(tplId, initialData, initialTitle);
+      const stagedAssetIds = Object.values(initialData ?? {}).map((value: any) => value && typeof value === 'object' ? value.attachmentId : null).filter((id): id is string => typeof id === 'string');
+      for (const assetId of stagedAssetIds) await apiService.linkReportAsset(assetId, newReport.id);
       await refreshReports();
       showToast(`Created report instance "${newReport.title}"`, 'success');
       return newReport;
@@ -573,7 +583,7 @@ export const AppProvider: React.FC<{
   // Send Report Action
   const sendReport = async (reportId: string, recipientUserId: string | string[], senderNote?: string, signaturePayload?: any) => {
     try {
-      if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) {
+      if (!import.meta.env.DEV || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) {
         const mappings = Array.isArray(signaturePayload) ? signaturePayload : [];
         await reportService.send(reportId, Array.isArray(recipientUserId) ? recipientUserId : [recipientUserId], senderNote, mappings);
         await refreshReports();
@@ -594,7 +604,7 @@ export const AppProvider: React.FC<{
   // Return Report Action
   const returnReport = async (reportId: string, feedback: string) => {
     try {
-      if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) {
+      if (!import.meta.env.DEV || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) {
         const report = reports.find((r) => r.id === reportId);
         // Bind the action to the assignment in the report's active send cycle.
         // A recipient may have historical assignments from prior cycles; using
@@ -623,7 +633,7 @@ export const AppProvider: React.FC<{
   // Reject Report Action
   const rejectReport = async (reportId: string, reason: string) => {
     try {
-      if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) {
+      if (!import.meta.env.DEV || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) {
         const report = reports.find((r) => r.id === reportId);
         const assignment = report?.assignments?.find((a) => a.recipientUserId === currentUser.id && (!report.currentSendCycleId || a.sendCycleId === report.currentSendCycleId) && a.assignmentStatus === 'pending');
         if (!assignment) throw new Error('ASSIGNMENT_NOT_OWNED');
@@ -646,7 +656,7 @@ export const AppProvider: React.FC<{
   // Sign Report Action
   const signReport = async (reportId: string, payload: any = {}) => {
     try {
-      if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) {
+      if (!import.meta.env.DEV || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) {
         const report = reports.find((r) => r.id === reportId);
         const assignment = report?.assignments?.find((a) => a.recipientUserId === currentUser.id);
         if (!assignment) throw new Error('ASSIGNMENT_NOT_OWNED');
@@ -677,7 +687,8 @@ export const AppProvider: React.FC<{
   // Add Report Comment Action
   const addReportComment = async (reportId: string, message: string) => {
     try {
-      await apiService.addReportComment(reportId, message);
+      if (!import.meta.env.DEV || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(reportId)) await reportService.addReportComment(reportId, message);
+      else await apiService.addReportComment(reportId, message);
       await Promise.all([refreshReports(), refreshNotifications()]);
       showToast('Comment posted', 'info');
     } catch (err: any) {

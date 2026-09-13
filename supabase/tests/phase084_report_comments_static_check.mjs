@@ -1,0 +1,3 @@
+import fs from 'node:fs'; import assert from 'node:assert/strict';
+const repo=fs.readFileSync('src/features/reports/reportRepository.ts','utf8'); const svc=fs.readFileSync('src/features/reports/reportService.ts','utf8'); const ctx=fs.readFileSync('src/context/AppContext.tsx','utf8'); const sql=fs.readFileSync('supabase/migrations/075_report_comments_supabase_contract.sql','utf8');
+assert.match(repo,/rpc\('list_report_comments'/); assert.match(repo,/rpc\('add_report_comment'/); assert.match(svc,/listReportComments/); assert.match(ctx,/reportService\.addReportComment/); assert.match(sql,/current_user_can_read_report/); assert.match(sql,/security definer/); assert.match(sql,/search_path=''/); console.log('phase084 report-comments static checks passed');

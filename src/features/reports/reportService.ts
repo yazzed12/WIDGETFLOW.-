@@ -280,4 +280,14 @@ export const reportService = {
       reportAssignmentId: n.report_assignment_id,
     }));
   },
+  async markNotificationRead(notificationId: string, userId: string): Promise<Notification[]> {
+    await reportRepository.markMyNotificationRead(notificationId);
+    return this.listNotifications(userId);
+  },
+  async markAllNotificationsRead(userId: string): Promise<Notification[]> {
+    await reportRepository.markMyNotificationsRead();
+    return this.listNotifications(userId);
+  },
+  async listReportComments(reportId: string) { return (await reportRepository.listReportComments(reportId)).map((c: any) => ({ id: c.id, reportId: c.report_id, userId: c.author_user_id, userName: c.author_name, userRole: c.author_role_name, message: c.message, timestamp: c.created_at })); },
+  async addReportComment(reportId: string, message: string) { return (await reportRepository.addReportComment(reportId, message)).map((c: any) => ({ id: c.id, reportId: c.report_id, userId: c.author_user_id, userName: c.author_name, userRole: c.author_role_name, message: c.message, timestamp: c.created_at })); },
 };

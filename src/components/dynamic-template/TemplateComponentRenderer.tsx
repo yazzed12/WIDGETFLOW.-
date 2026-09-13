@@ -461,6 +461,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
           onChange={(k, val) => onChange && onChange(k, val)}
           disabled={disabled}
           error={error}
+          reportId={reportId}
         />
       </div>
     );
