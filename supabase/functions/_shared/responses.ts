@@ -177,16 +177,39 @@ const SAFE_DATABASE_ERRORS: Record<
   ],
 };
 
-function allowedOrigins(): Set<string> {
-  const configured =
-    Deno.env.get('WIDGETFLOW_ALLOWED_ORIGINS') ??
-    'http://localhost:5173,http://127.0.0.1:5173';
+const DEFAULT_ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://widgetflow-pi.vercel.app',
+]);
 
-  return new Set(
-    configured
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean),
+/*
+ * Vercel preview hostnames are deployment-specific. Keep the exception
+ * anchored to this WidgetFlow project/team hostname rather than trusting
+ * arbitrary *.vercel.app origins.
+ */
+const WIDGETFLOW_VERCEL_PREVIEW_ORIGIN =
+  /^https:\/\/widgetflow-[a-z0-9][a-z0-9-]*-yazzed12s-projects\.vercel\.app$/i;
+
+function allowedOrigins(): Set<string> {
+  const origins = new Set(DEFAULT_ALLOWED_ORIGINS);
+  const configured =
+    Deno.env.get('WIDGETFLOW_ALLOWED_ORIGINS') ?? '';
+
+  for (const origin of configured
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)) {
+    origins.add(origin);
+  }
+
+  return origins;
+}
+
+export function isAllowedOrigin(origin: string): boolean {
+  return (
+    allowedOrigins().has(origin) ||
+    WIDGETFLOW_VERCEL_PREVIEW_ORIGIN.test(origin)
   );
 }
 
@@ -196,10 +219,7 @@ export function corsHeaders(
   const origin =
     request.headers.get('origin');
 
-  if (
-    origin &&
-    !allowedOrigins().has(origin)
-  ) {
+  if (origin && !isAllowedOrigin(origin)) {
     throw new ApiError(
       403,
       'ORIGIN_NOT_ALLOWED',

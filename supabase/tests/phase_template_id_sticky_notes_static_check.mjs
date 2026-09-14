@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const templateMigration=fs.readFileSync(new URL('../migrations/081_template_display_id.sql',import.meta.url),'utf8');
+const notesMigration=fs.readFileSync(new URL('../migrations/082_sticky_notes.sql',import.meta.url),'utf8');
+const templateMapper=fs.readFileSync(new URL('../../src/features/templates/mappers/templateSerializer.ts',import.meta.url),'utf8');
+const notesPage=fs.readFileSync(new URL('../../src/pages/StickyNotesPage.tsx',import.meta.url),'utf8');
+const monitor=fs.readFileSync(new URL('../../src/components/dashboard/WorkflowMonitor.tsx',import.meta.url),'utf8');
+assert.match(templateMigration,/template_display_id/); assert.match(templateMigration,/approve_template/); assert.match(templateMigration,/templates_assign_display_id/); assert.match(templateMigration,/on conflict\s*\(year_key\)/i); assert.match(templateMigration,/templates_display_id_format_ck/); assert.doesNotMatch(templateMigration,/recipient/);
+assert.match(templateMapper,/template_display_id/); assert.match(monitor,/Needs My Review/); assert.match(monitor,/My Requests/);
+assert.match(notesMigration,/create table public\.sticky_notes/); assert.match(notesMigration,/auth\.uid\(\)/); assert.match(notesMigration,/sticky_notes_(select|insert|update|delete)_own/); assert.match(notesPage,/stickyNotesService/); assert.doesNotMatch(notesPage,/localStorage/);
+console.log('template display id and sticky notes static checks passed');

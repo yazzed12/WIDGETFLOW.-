@@ -574,6 +574,7 @@ export interface FooterConfig {
 
 export interface WidgetTemplate {
   id: string;
+  templateDisplayId?: string;
   name: string;
   description: string;
   categoryId: string;
@@ -641,6 +642,7 @@ export interface ReportAuditRecord {
 
 export interface ReportInstance {
   id: string;
+  displayId?: string;
   templateId: string;
   templateName: string;
   templateVersion?: string | number;
@@ -761,7 +763,7 @@ export interface Notification {
   reportAssignmentId?: string;
 }
 
-export type ViewType = "dashboard" | "templates" | "my-requests" | "approvals" | "reports" | "notifications" | "engine-proof" | "admin";
+export type ViewType = "dashboard" | "templates" | "my-requests" | "approvals" | "reports" | "notifications" | "organization-activity" | "sticky-notes" | "engine-proof" | "admin";
 
 export type AdminViewType = "overview" | "data-control" | "features" | "studio-config" | "packs" | "elements" | "content-library" | "users" | "roles" | "categories" | "settings" | "audit";
 

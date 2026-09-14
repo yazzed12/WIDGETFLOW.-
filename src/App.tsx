@@ -27,6 +27,8 @@ import { ApprovalsPage } from './pages/ApprovalsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { EngineProofPage } from './pages/EngineProofPage';
+import { OrganizationActivityPage } from './pages/OrganizationActivityPage';
+import { StickyNotesPage } from './pages/StickyNotesPage';
 
 import { SystemConfigProvider } from './context/SystemConfigContext';
 import { AdminLayout } from './components/admin/AdminLayout';
@@ -55,6 +57,10 @@ const MainContent: React.FC = () => {
         return hasPermission('reports.view_own') || hasPermission('reports.view_received') || hasPermission('reports.view_organization') ? <ReportsPage /> : <DashboardPage />;
       case 'notifications':
         return hasPermission('notifications.view') ? <NotificationsPage /> : <DashboardPage />;
+      case 'organization-activity':
+        return hasPermission('audit_history.view') ? <OrganizationActivityPage /> : <DashboardPage />;
+      case 'sticky-notes':
+        return <StickyNotesPage />;
       case 'engine-proof':
         return <EngineProofPage />;
       default:

@@ -245,7 +245,7 @@ export const TemplatesPage: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold text-slate-900 truncate">{tpl.name}</h4>
+                        <h4 className="text-xs font-bold text-slate-900 truncate">{tpl.name}</h4>{tpl.templateDisplayId && <span className="text-[10px] font-mono text-slate-400">{tpl.templateDisplayId}</span>}
                         <span className="bg-slate-100 text-slate-600 text-[9px] font-bold px-2 py-0.2 rounded border border-slate-200">
                           {getBusinessRevisionLabel(tpl.version)}
                         </span>

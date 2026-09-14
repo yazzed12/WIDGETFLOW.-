@@ -66,7 +66,7 @@ export function deserializeTemplateRow(row: any, sections: any[] = [], fields: a
     draft: 'Draft', pending_approval: 'Pending Approval', approved: 'Approved', rejected: 'Rejected', archived: 'Archived', superseded: 'Superseded',
   };
   return {
-    id: row.id, name: row.name, description: row.description ?? '', categoryId: row.category_id,
+    id: row.id, templateDisplayId: row.template_display_id ?? undefined, name: row.name, description: row.description ?? '', categoryId: row.category_id,
     createdById: row.created_by_user_id, createdByName: row.creator_name, createdByRole: row.creator_role_name,
     createdAt: row.created_at, updatedAt: row.updated_at, status: statusMap[row.status] ?? 'Draft',
     tags: tags.filter((tag) => tag.template_id === row.id).map((tag) => tag.tag), version: row.version_label,

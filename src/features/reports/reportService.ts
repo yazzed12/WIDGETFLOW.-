@@ -92,6 +92,7 @@ export function mapReportRow(row: any): ReportInstance {
 
   return {
     id: row.id,
+    displayId: row.report_display_id ?? undefined,
     templateId: row.template_id,
     templateVersionId: row.template_version_id,
     templateName: row.template_name_snapshot,

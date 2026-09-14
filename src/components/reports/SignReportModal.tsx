@@ -13,7 +13,7 @@ export const SignReportModal: React.FC<SignReportModalProps> = ({ report, onClos
 
   return (
     <ReportSignatureModal
-      reportTitle={report.title}
+      reportTitle={report.displayId ? `${report.title} · ${report.displayId}` : report.title}
       signatureRole={report.createdById === currentUser.id ? 'sender' : 'receiver'}
       currentUser={currentUser}
       onConfirm={async (payload) => {

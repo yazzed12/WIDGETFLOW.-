@@ -91,7 +91,7 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
               {getStatusBadge(template.status === 'Draft' && template.returnedAt ? 'Returned for Revision' : template.status)}
               <span className="text-xs font-semibold text-slate-500">{categoryName}</span>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">{template.name}</h2>
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">{template.name}</h2>{template.templateDisplayId && <span className="text-[10px] font-mono text-slate-400">{template.templateDisplayId}</span>}
           </div>
 
           <button

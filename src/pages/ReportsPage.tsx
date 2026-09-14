@@ -178,6 +178,7 @@ export const ReportsPage: React.FC = () => {
                       {rep.categoryName}
                     </span>
                   </div>
+                  {rep.displayId && <div className="text-[11px] font-mono text-slate-400">{rep.displayId}</div>}
 
                   <div className="text-xs text-slate-500 flex flex-wrap items-center gap-3">
                     <span>Template: <strong className="text-slate-700">{rep.templateName}</strong></span>

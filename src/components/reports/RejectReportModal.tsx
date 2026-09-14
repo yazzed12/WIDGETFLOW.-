@@ -43,7 +43,7 @@ export const RejectReportModal: React.FC<RejectReportModalProps> = ({ report, on
             </div>
             <div>
               <h2 className="text-base font-bold text-rose-950">Reject this report?</h2>
-              <p className="text-xs text-rose-700 truncate max-w-[240px]">{report.title}</p>
+              <p className="text-xs text-rose-700 truncate max-w-[240px]">{report.title}{report.displayId ? ` · ${report.displayId}` : ''}</p>
             </div>
           </div>
 

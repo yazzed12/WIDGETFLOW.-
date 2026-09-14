@@ -145,7 +145,7 @@ export const MyRequestsPage: React.FC = () => {
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-3">
                     <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
-                      {req.name}
+                      {req.name}{req.templateDisplayId && <span className="block text-[10px] font-mono text-slate-400">{req.templateDisplayId}</span>}
                     </h3>
                     <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                       {getCategoryName(req.categoryId)}

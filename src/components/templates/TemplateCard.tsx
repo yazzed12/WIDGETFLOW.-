@@ -52,6 +52,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({ template }) => {
 
         <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors mt-3">
           {template.name}
+          {template.templateDisplayId && <span className="block text-[10px] font-mono text-slate-400">{template.templateDisplayId}</span>}
         </h3>
         <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
           {template.description}

@@ -35,7 +35,7 @@ export const ReturnReportModal: React.FC<ReturnReportModalProps> = ({ report, on
             </div>
             <div>
               <h2 className="text-base font-bold text-rose-950">Return Report for Changes</h2>
-              <p className="text-xs text-rose-700">{report.title}</p>
+              <p className="text-xs text-rose-700">{report.title}{report.displayId ? ` · ${report.displayId}` : ''}</p>
             </div>
           </div>
 

@@ -143,7 +143,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
               </div>
               <div>
                 <h2 className="text-base font-bold text-slate-900">Send Report for Review</h2>
-                <p className="text-xs text-slate-500">{report.title}</p>
+                <p className="text-xs text-slate-500">{report.title}{report.displayId ? ` · ${report.displayId}` : ''}</p>
               </div>
             </div>
 

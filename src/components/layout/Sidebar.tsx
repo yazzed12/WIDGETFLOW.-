@@ -16,6 +16,8 @@ import {
   BarChart3,
   Terminal,
   Layers,
+  Activity,
+  StickyNote,
 } from 'lucide-react';
 import type { ViewType } from '../../types';
 
@@ -99,6 +101,13 @@ export const Sidebar: React.FC = () => {
       badge: unreadNotifCount > 0 ? unreadNotifCount : undefined,
       visible: hasPermission('notifications.view'),
     },
+    {
+      id: 'organization-activity',
+      label: 'Organization Activity',
+      icon: <Activity className="w-4 h-4" />,
+      visible: hasPermission('audit_history.view'),
+    },
+    { id: 'sticky-notes', label: 'Sticky Notes', icon: <StickyNote className="w-4 h-4" /> },
   ];
 
   const navItems = rawNavItems.filter((item) => {

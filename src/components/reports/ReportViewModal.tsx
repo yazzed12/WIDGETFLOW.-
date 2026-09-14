@@ -206,6 +206,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
               <p className="text-xs text-slate-500 mt-1">
                 Template Used: <strong className="text-slate-800">{report.templateName}</strong> ({report.categoryName})
               </p>
+              {report.displayId && <p className="text-[11px] font-mono text-slate-400 mt-1">{report.displayId}</p>}
             </div>
           </div>
 

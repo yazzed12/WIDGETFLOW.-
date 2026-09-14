@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { StatusBadge } from '../components/common/StatusBadge';
+import { QuickActions } from '../components/dashboard/QuickActions';
 import {
   Library,
   Clock,
@@ -19,7 +20,9 @@ import {
   Eye,
   Plus,
   FileText,
+  StickyNote,
 } from 'lucide-react';
+import { WorkflowMonitor } from '../components/dashboard/WorkflowMonitor';
 
 export const DashboardPage: React.FC = () => {
   const {
@@ -29,7 +32,7 @@ export const DashboardPage: React.FC = () => {
     getPendingApprovalsForUser,
     getReportsAwaitingMyReview,
     notifications,
-    approvalRecords,
+    templates,
     reports,
     setActiveView,
     openFillReportModal,
@@ -37,6 +40,8 @@ export const DashboardPage: React.FC = () => {
     openSignReportModal,
     openRejectReportModal,
     openAddTemplateModal,
+    openTemplateDetail,
+    openApprovalDetail,
     hasPermission,
   } = useApp();
 
@@ -226,45 +231,47 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Quick Actions Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
-        <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Quick Actions:</span>
-        <div className="flex flex-wrap items-center gap-2">
-          {hasPermission('templates.use') && <button
-            onClick={() => setActiveView('templates')}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Use Report Template</span>
-          </button>}
-
-          {hasPermission('templates.create') && hasPermission('studio.access') && <button
-            onClick={() => openAddTemplateModal()}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-200"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Create Report Template</span>
-          </button>}
-
-          {(hasPermission('reports.view_own') || hasPermission('reports.view_received')) && <button
-            onClick={() => setActiveView('reports')}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-200"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>View My Reports</span>
-          </button>}
-
-          {hasPermission('template_approvals.view') && (
-            <button
-              onClick={() => setActiveView('approvals')}
-              className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-amber-200"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Review Approvals ({pendingTemplateApprovals.length})</span>
-            </button>
-          )}
-        </div>
-      </div>
+      <QuickActions
+        actions={[
+          {
+            title: 'Create New Template',
+            description: 'Start a template in the existing builder.',
+            icon: Plus,
+            onClick: () => openAddTemplateModal(),
+            visible: hasPermission('templates.create') && hasPermission('studio.access'),
+          },
+          {
+            title: 'Create Report',
+            description: 'Choose an approved template and fill a report.',
+            icon: FileSpreadsheet,
+            onClick: () => setActiveView('templates'),
+            visible: hasPermission('templates.use') && hasPermission('reports.create'),
+          },
+          {
+            title: 'My Requests',
+            description: 'Track templates submitted for approval.',
+            icon: FileText,
+            onClick: () => setActiveView('my-requests'),
+            visible: hasPermission('templates.create') || hasPermission('templates.edit_own_draft'),
+            badge: myTemplateRequests.length > 0 ? `${myTemplateRequests.length} pending` : undefined,
+          },
+          {
+            title: 'Approvals',
+            description: 'Open the template approval inbox.',
+            icon: Clock,
+            onClick: () => setActiveView('approvals'),
+            visible: hasPermission('template_approvals.view'),
+            badge: pendingTemplateApprovals.length > 0 ? `${pendingTemplateApprovals.length} pending` : undefined,
+          },
+          {
+            title: 'Sticky Notes',
+            description: 'Capture a quick personal note.',
+            icon: StickyNote,
+            onClick: () => setActiveView('sticky-notes'),
+            visible: true,
+          },
+        ]}
+      />
 
       {/* Attention Required Banner */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
@@ -490,40 +497,7 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Activity Feed */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden h-fit">
-          <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-indigo-600" />
-              Recent Organization Activity
-            </h3>
-            <span className="text-[10px] text-slate-400 font-medium">Audit History</span>
-          </div>
-
-          <div className="p-4 space-y-4 max-h-[500px] overflow-y-auto">
-            {approvalRecords.map((record) => (
-              <div key={record.id} className="flex gap-3 text-xs">
-                <div className="mt-0.5">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-slate-800 font-medium">
-                    <span className="font-bold text-slate-900">{record.personName}</span>{' '}
-                    <span className="text-slate-500">({record.role})</span>{' '}
-                    <span className="lowercase font-semibold text-slate-700">{record.action}</span>{' '}
-                    <span className="font-semibold text-indigo-700">"{record.templateName}"</span>
-                  </div>
-                  {record.comment && (
-                    <div className="mt-1 p-2 bg-slate-50 rounded border border-slate-100 text-[11px] text-slate-600 italic">
-                      "{record.comment}"
-                    </div>
-                  )}
-                  <div className="text-[10px] text-slate-400 mt-1">{formatRelativeTime(record.timestamp)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <WorkflowMonitor currentUser={currentUser} reports={reports} templates={templates} pendingTemplateApprovals={pendingTemplateApprovals} myTemplateRequests={myTemplateRequests} setActiveView={setActiveView} openReportViewModal={openReportViewModal} openTemplateDetail={openTemplateDetail} openAddTemplateModal={openAddTemplateModal} openApprovalDetail={openApprovalDetail} hasPermission={hasPermission} />
       </div>
     </div>
   );

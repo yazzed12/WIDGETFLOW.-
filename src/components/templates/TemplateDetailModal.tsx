@@ -55,7 +55,7 @@ export const TemplateDetailModal: React.FC<TemplateDetailModalProps> = ({ templa
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-900 tracking-tight">{template.name}</h2>
+                <h2 className="text-lg font-bold text-slate-900 tracking-tight">{template.name}</h2>{template.templateDisplayId && <span className="text-[10px] font-mono text-slate-400">{template.templateDisplayId}</span>}
                 <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded">
                   {template.version || 'v1.0'}
                 </span>

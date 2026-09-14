@@ -1,5 +1,6 @@
 import type { WidgetTemplate } from '../../../types';
 import { templateRepository } from '../repositories/templateRepository';
+import { templateTimelineRepository } from '../templateTimelineRepository';
 export const templateService = {
   getTemplates: () => templateRepository.getTemplates(), getApprovedTemplates: () => templateRepository.getApprovedTemplates(),
   getCategories: () => templateRepository.getCategories(),
@@ -11,4 +12,5 @@ export const templateService = {
   returnForRevision: (id: string, reason: string) => templateRepository.returnForRevision(id, reason),
   createRevision: (id: string) => templateRepository.createRevision(id),
   addComment: (id: string, message: string) => templateRepository.addComment(id, message),
+  getTimeline: (id: string) => templateTimelineRepository.get(id),
 };

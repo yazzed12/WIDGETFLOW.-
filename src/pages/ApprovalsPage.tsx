@@ -164,7 +164,7 @@ export const ApprovalsPage: React.FC = () => {
                     </div>
                     <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-slate-900 truncate">{req.name}</h3>
+                        <h3 className="text-sm font-bold text-slate-900 truncate">{req.name}</h3>{req.templateDisplayId && <span className="text-[10px] font-mono text-slate-400">{req.templateDisplayId}</span>}
                         {isUnclaimedQueueItem ? (
                           <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
                             <Users className="w-3 h-3 text-indigo-600" />
