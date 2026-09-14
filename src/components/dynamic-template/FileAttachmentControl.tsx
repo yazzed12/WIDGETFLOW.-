@@ -4,6 +4,7 @@ import { UploadCloud, Trash2, ExternalLink, FileText, CheckCircle2, AlertCircle 
 import { getReportBusinessFieldKey } from '../../shared/signatureResolver';
 import { apiService } from '../../services/apiService';
 import { authenticatedBinaryRequest } from '../../services/httpClient';
+import { normalizeError } from '../../lib/errors/errorHandling';
 
 interface FileAttachmentControlProps {
   component: TemplateComponent;
@@ -13,6 +14,7 @@ interface FileAttachmentControlProps {
   disabled?: boolean;
   error?: string;
   reportId?: string;
+  ensureReportId?: () => Promise<string>;
 }
 
 export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
@@ -23,7 +25,13 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
   disabled,
   error,
   reportId,
+  ensureReportId,
 }) => {
+  const safeAttachmentError = (error: unknown, fallback: string): string => {
+    const normalized = normalizeError(error);
+    if (normalized.code === 'FILE_TYPE_NOT_SUPPORTED' || normalized.code === 'FILE_TOO_LARGE') return normalized.message;
+    return fallback;
+  };
   const fieldKey = getReportBusinessFieldKey(component) || '';
   const fileConfig = component.fileConfig || {};
   const allowedTypes = (fileConfig.allowedFileTypes || ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg'])
@@ -62,7 +70,7 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
         setPreviewUrl(objectUrl);
       })
       .catch((error: any) => {
-        if (!disposed) setDownloadError(error?.message || 'Unable to load attachment preview.');
+        if (!disposed) setDownloadError(safeAttachmentError(error, 'Unable to load attachment preview.'));
       })
       .finally(() => { if (!disposed) setPreviewLoading(false); });
     return () => {
@@ -85,7 +93,7 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
       link.remove();
       URL.revokeObjectURL(objectUrl);
     } catch (error: any) {
-      setDownloadError(error?.message || 'Unable to download attachment.');
+      setDownloadError(safeAttachmentError(error, 'Unable to download attachment.'));
     }
   };
 
@@ -129,6 +137,13 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
     setIsUploading(true);
 
     try {
+      const canonicalReportId = reportId ?? await ensureReportId?.();
+      if (!canonicalReportId) {
+        setUploadError('The report could not be prepared for attachments. Please try again.');
+        setIsUploading(false);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async () => {
         try {
@@ -137,7 +152,8 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
             filename: file.name,
             mimeType: mime || 'application/octet-stream',
             base64Data,
-            ...(reportId ? { linkedReportId: reportId, purpose: 'report_attachment' } : { purpose: 'report_attachment' }),
+            purpose: 'report_attachment',
+            linkedReportId: canonicalReportId,
           });
           if (json) {
             const payload = {
@@ -149,10 +165,10 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
             };
             if (onChange) onChange(fieldKey, payload);
           } else {
-            setUploadError('Upload failed');
+            setUploadError("We couldn't upload this file. Please try again.");
           }
         } catch (err: any) {
-          setUploadError(err.message || 'Upload failed');
+          setUploadError(safeAttachmentError(err, "We couldn't upload this file. Please try again."));
         } finally {
           setIsUploading(false);
         }
@@ -166,7 +182,7 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
       reader.readAsDataURL(file);
     } catch (err: any) {
       setIsUploading(false);
-      setUploadError(err.message || 'Network error during upload');
+      setUploadError(safeAttachmentError(err, "We couldn't upload this file. Please try again."));
     }
   };
 

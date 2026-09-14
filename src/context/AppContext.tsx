@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type {
   User,
@@ -17,6 +17,8 @@ import type { PermissionKey } from '../shared/permissionCatalog';
 import { hasPermissionKeys } from '../shared/permissionCatalog';
 import { templateService } from '../features/templates/services/templateService';
 import { reportService } from '../features/reports/reportService';
+import { ReportPersistenceCoordinator } from '../features/reports/reportPersistenceCoordinator';
+import { normalizeError } from '../lib/errors/errorHandling';
 
 interface ToastState {
   id: number;
@@ -115,12 +117,17 @@ interface AppContextType {
 
   approveTemplate: (templateId: string) => void;
   rejectTemplate: (templateId: string, reason: string) => void;
+  returnTemplateForRevision: (templateId: string, reason: string) => void;
   addRequestComment: (templateId: string, message: string) => void;
 
   // Report Instance Handlers
   createReportInstance: (
     payload: string | { templateId: string; data?: Record<string, any>; title?: string }
   ) => Promise<ReportInstance | undefined>;
+
+  ensureReportInstance: (
+    payload: { templateId: string; data?: Record<string, any>; title?: string }
+  ) => Promise<ReportInstance>;
 
   updateReportInstance: (
     reportId: string,
@@ -207,6 +214,11 @@ export const AppProvider: React.FC<{
   const [selectedReportForReject, setSelectedReportForReject] = useState<ReportInstance | null>(null);
   const [selectedReportForSign, setSelectedReportForSign] = useState<ReportInstance | null>(null);
   const [reportToEdit, setReportToEdit] = useState<ReportInstance | null>(null);
+  const reportPersistenceRef = useRef(
+    new ReportPersistenceCoordinator<ReportInstance>((payload) =>
+      reportService.create(payload.templateId, payload.data, payload.title),
+    ),
+  );
 
   const markNotificationRead = async (id: string) => {
     if (isSupabasePrincipal(currentUser)) {
@@ -294,11 +306,13 @@ export const AppProvider: React.FC<{
   };
 
   const openFillReportModal = (template: WidgetTemplate, reportInstanceToEdit?: ReportInstance | null) => {
+    reportPersistenceRef.current.seed(reportInstanceToEdit || null);
     setSelectedTemplateForFill(template);
     setReportToEdit(reportInstanceToEdit || null);
   };
 
   const closeFillReportModal = () => {
+    reportPersistenceRef.current.clear();
     setSelectedTemplateForFill(null);
     setReportToEdit(null);
   };
@@ -382,7 +396,22 @@ export const AppProvider: React.FC<{
           templateService.getPendingApprovals(),
         ]);
         setTemplates(approved);
-        setMyTemplates(owned);
+        // Older deployed draft-save responses may omit the return marker even
+        // though the template is still the creator's returned-for-revision
+        // draft. Preserve that UI context until the next successful resubmit
+        // changes the canonical status to pending approval.
+        setMyTemplates((previous) => owned.map((template) => {
+          const prior = previous.find((candidate) => candidate.id === template.id);
+          if (
+            template.status === 'Draft' &&
+            prior?.status === 'Draft' &&
+            prior.returnedAt &&
+            !template.returnedAt
+          ) {
+            return { ...template, returnedAt: prior.returnedAt, returnReason: prior.returnReason };
+          }
+          return template;
+        }));
         setPendingTemplateApprovals(pending);
       } else {
         const data = await templateService.getTemplates();
@@ -395,6 +424,14 @@ export const AppProvider: React.FC<{
       console.warn('Failed to refresh templates:', err.message);
     } finally { setTemplatesLoading(false); }
   };
+  // Approval Inbox and My Requests are long-lived views. Refresh their
+  // Supabase-backed collections when entered so an already-open session sees
+  // newly submitted or updated templates without requiring a full reload.
+  useEffect(() => {
+    if (activeView === 'approvals' || activeView === 'my-requests') {
+      void refreshTemplates();
+    }
+  }, [activeView]);
   const clearTemplatesError = () => setTemplatesError(null);
 
   const refreshReports = async () => {
@@ -499,6 +536,20 @@ export const AppProvider: React.FC<{
     }
   };
 
+  // Return a pending template to its creator as an editable draft. The
+  // reviewer action is distinct from permanent rejection and uses the
+  // canonical Supabase reviewer authorization in the RPC.
+  const returnTemplateForRevision = async (templateId: string, reason: string) => {
+    try {
+      const tpl = await templateService.returnForRevision(templateId, reason) as any;
+      await refreshTemplates();
+      showToast(`Template "${tpl.name}" returned for revision.`, 'info');
+      closeApprovalDetail();
+    } catch (err: any) {
+      showToast(normalizeError(err).message, 'warning');
+    }
+  };
+
   // Claim Template Review Action
   const claimTemplateReview = async (templateId: string) => {
     try {
@@ -524,6 +575,24 @@ export const AppProvider: React.FC<{
   };
 
   // Create Report Instance from Approved Template
+  const ensureReportInstance = async (
+    payload: { templateId: string; data?: Record<string, any>; title?: string }
+  ): Promise<ReportInstance> => {
+    if (reportToEdit && !reportPersistenceRef.current.getCurrent()) {
+      reportPersistenceRef.current.seed(reportToEdit);
+    }
+
+    const before = reportPersistenceRef.current.getCurrent();
+    const report = await reportPersistenceRef.current.ensure(payload);
+
+    if (!before && reportPersistenceRef.current.getCurrent() === report) {
+      setReportToEdit(report);
+      await refreshReports();
+    }
+
+    return report;
+  };
+
   const createReportInstance = async (
     payload: string | { templateId: string; data?: Record<string, any>; title?: string }
   ): Promise<ReportInstance | undefined> => {
@@ -626,7 +695,7 @@ export const AppProvider: React.FC<{
       showToast('Report returned to author for changes', 'info');
       closeReturnReportModal();
     } catch (err: any) {
-      showToast(err.message || 'Failed to return report', 'warning');
+      showToast(normalizeError(err).message, 'warning');
     }
   };
 
@@ -793,9 +862,11 @@ export const AppProvider: React.FC<{
         submitTemplateForApproval,
         approveTemplate,
         rejectTemplate,
+        returnTemplateForRevision,
         claimTemplateReview,
         addRequestComment,
         createReportInstance,
+        ensureReportInstance,
         updateReportInstance,
         markReportCompleted,
         sendReport,

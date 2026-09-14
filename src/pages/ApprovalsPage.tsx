@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ApproveConfirmModal } from '../components/approvals/ApproveConfirmModal';
 import { RejectModal } from '../components/approvals/RejectModal';
+import { ReturnTemplateModal } from '../components/approvals/ReturnTemplateModal';
 import {
   CheckSquare,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   Layers,
   Inbox,
   UserCheck,
+  RotateCcw,
 } from 'lucide-react';
 import type { WidgetTemplate } from '../types';
 
@@ -26,6 +28,7 @@ export const ApprovalsPage: React.FC = () => {
     openApprovalDetail,
     approveTemplate,
     rejectTemplate,
+    returnTemplateForRevision,
     claimTemplateReview,
     hasPermission,
   } = useApp();
@@ -34,6 +37,7 @@ export const ApprovalsPage: React.FC = () => {
 
   const [confirmApproveTemplate, setConfirmApproveTemplate] = useState<WidgetTemplate | null>(null);
   const [rejectTargetTemplate, setRejectTargetTemplate] = useState<WidgetTemplate | null>(null);
+  const [returnTargetTemplate, setReturnTargetTemplate] = useState<WidgetTemplate | null>(null);
 
   const getCategoryName = (catId: string) => {
     return categories.find((c) => c.id === catId)?.name || 'General';
@@ -143,6 +147,11 @@ export const ApprovalsPage: React.FC = () => {
           <div className="divide-y divide-slate-100">
             {pendingApprovals.map((req) => {
               const isUnclaimedQueueItem = !req.requestedApprovalFromUserId;
+              const canReviewThisTemplate =
+                req.status === 'Pending Approval' &&
+                req.createdById !== currentUser.id &&
+                (!req.requestedApprovalFromUserId || req.requestedApprovalFromUserId === currentUser.id) &&
+                hasPermission('template_approvals.view');
 
               return (
                 <div
@@ -186,18 +195,17 @@ export const ApprovalsPage: React.FC = () => {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                    {isUnclaimedQueueItem ? (
-                      hasPermission('template_approvals.approve') && (
-                        <button
-                          onClick={() => claimTemplateReview(req.id)}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-                          title="Take this request for review"
-                        >
-                          <UserCheck className="w-4 h-4" />
-                          <span>Take for Review</span>
-                        </button>
-                      )
-                    ) : (
+                    {isUnclaimedQueueItem && hasPermission('template_approvals.approve') && (
+                      <button
+                        onClick={() => claimTemplateReview(req.id)}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        title="Take this request for review"
+                      >
+                        <UserCheck className="w-4 h-4" />
+                        <span>Take for Review</span>
+                      </button>
+                    )}
+                    {canReviewThisTemplate && (
                       <>
                         <button
                           onClick={() => openApprovalDetail(req)}
@@ -215,6 +223,17 @@ export const ApprovalsPage: React.FC = () => {
                           >
                             <XCircle className="w-4 h-4 text-rose-600" />
                             <span className="hidden sm:inline">Reject</span>
+                          </button>
+                        )}
+
+                        {hasPermission('template_approvals.reject') && hasPermission('template_approvals.approve') && (
+                          <button
+                            onClick={() => setReturnTargetTemplate(req)}
+                            className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer border border-amber-200"
+                            title="Return for Revision"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                            <span className="hidden sm:inline">Return</span>
                           </button>
                         )}
 
@@ -258,6 +277,16 @@ export const ApprovalsPage: React.FC = () => {
             setRejectTargetTemplate(null);
           }}
           onClose={() => setRejectTargetTemplate(null)}
+        />
+      )}
+      {returnTargetTemplate && (
+        <ReturnTemplateModal
+          template={returnTargetTemplate}
+          onConfirm={(reason) => {
+            void returnTemplateForRevision(returnTargetTemplate.id, reason);
+            setReturnTargetTemplate(null);
+          }}
+          onClose={() => setReturnTargetTemplate(null)}
         />
       )}
     </div>

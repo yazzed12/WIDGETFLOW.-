@@ -42,6 +42,7 @@ interface TemplateComponentRendererProps {
   currentUser?: any;
   theme?: TemplateTheme;
   reportId?: string;
+  ensureReportId?: () => Promise<string>;
 }
 
 const ImageComponentRenderer: React.FC<{
@@ -120,6 +121,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
   currentUser,
   theme,
   reportId,
+  ensureReportId,
 }) => {
   const fieldKey = getReportBusinessFieldKey(component) || '';
   const label = component.label || fieldKey;
@@ -462,6 +464,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
           disabled={disabled}
           error={error}
           reportId={reportId}
+          ensureReportId={ensureReportId}
         />
       </div>
     );

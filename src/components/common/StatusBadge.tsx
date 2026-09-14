@@ -7,7 +7,7 @@ interface StatusBadgeProps {
   size?: 'sm' | 'md';
 }
 
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'sm' }) => {
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type, size = 'sm' }) => {
   const sizeClasses = size === 'sm' ? 'text-[10px] px-2.5 py-0.5' : 'text-xs px-3 py-1';
   const iconSize = size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5';
 
@@ -56,7 +56,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'sm' })
       return (
         <span className={`bg-rose-50 text-rose-700 border border-rose-200/80 font-bold rounded-full flex items-center gap-1 shrink-0 ${sizeClasses}`}>
           <RotateCcw className={`${iconSize} text-rose-600`} />
-          Returned
+          {type === 'template' ? 'Returned for Revision' : 'Returned'}
         </span>
       );
 

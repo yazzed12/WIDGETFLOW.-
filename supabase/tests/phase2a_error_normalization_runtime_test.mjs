@@ -26,4 +26,14 @@ assert.equal(email.code, 'INVALID_EMAIL');
 assert.equal(email.field, 'email');
 assert.equal(email.message, 'Please enter a valid email address.');
 
+const duplicate = normalizeError({ code: 'EMAIL_ALREADY_EXISTS', message: 'An account already uses this email address.' });
+assert.equal(duplicate.code, 'EMAIL_ALREADY_EXISTS');
+assert.equal(duplicate.field, 'email');
+assert.equal(duplicate.message, 'An account with this email address already exists.');
+
+const duplicateMessageOnly = normalizeError({ message: 'An account already uses this email address.' });
+assert.equal(duplicateMessageOnly.code, 'EMAIL_ALREADY_EXISTS');
+assert.equal(duplicateMessageOnly.field, 'email');
+assert.equal(duplicateMessageOnly.message, 'An account with this email address already exists.');
+
 console.log('phase2a runtime normalization checks passed');

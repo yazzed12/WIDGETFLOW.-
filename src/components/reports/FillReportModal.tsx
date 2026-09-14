@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { WidgetTemplate, ReportInstance } from '../../types';
+import type { WidgetTemplate } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { DynamicTemplateRenderer } from '../dynamic-template/DynamicTemplateRenderer';
 import { validateTemplateValues } from '../dynamic-template/validationHelper';
@@ -15,7 +15,7 @@ export const FillReportModal: React.FC<FillReportModalProps> = ({ template, onCl
   const {
     currentUser,
     categories,
-    createReportInstance,
+    ensureReportInstance,
     updateReportInstance,
     openSendReportModal,
     refreshReports,
@@ -62,15 +62,21 @@ export const FillReportModal: React.FC<FillReportModalProps> = ({ template, onCl
     return normalizeReportDataForEditing(data, template);
   };
 
+  const ensurePersistedReport = async () => {
+    const canonicalData = canonicalizeForPersistence(formData);
+    return ensureReportInstance({
+      templateId: template.id,
+      data: canonicalData,
+      title: reportTitle.trim() || defaultTitle,
+    });
+  };
+
   const handleSaveDraft = async () => {
     setIsSubmitting(true);
     try {
       const canonicalData = canonicalizeForPersistence(formData);
-      if (reportToEdit) {
-        await updateReportInstance(reportToEdit.id, canonicalData, reportTitle.trim() || defaultTitle, false);
-      } else {
-        await createReportInstance({ templateId: template.id, data: canonicalData, title: reportTitle.trim() || defaultTitle });
-      }
+      const activeReport = await ensurePersistedReport();
+      await updateReportInstance(activeReport.id, canonicalData, reportTitle.trim() || defaultTitle, false);
       showToast('Report draft saved', 'info');
       onClose();
       setActiveView('reports');
@@ -87,13 +93,8 @@ export const FillReportModal: React.FC<FillReportModalProps> = ({ template, onCl
     setIsSubmitting(true);
     try {
       const canonicalData = canonicalizeForPersistence(formData);
-      let activeReport: ReportInstance;
-      if (reportToEdit) {
-        activeReport = (await updateReportInstance(reportToEdit.id, canonicalData, reportTitle.trim() || defaultTitle, true))!;
-      } else {
-        activeReport = (await createReportInstance({ templateId: template.id, data: canonicalData, title: reportTitle.trim() || defaultTitle }))!;
-        activeReport = (await updateReportInstance(activeReport.id, canonicalData, reportTitle.trim() || defaultTitle, true))!;
-      }
+      const persistedReport = await ensurePersistedReport();
+      const activeReport = (await updateReportInstance(persistedReport.id, canonicalData, reportTitle.trim() || defaultTitle, true))!;
       await refreshReports();
 
       // Supabase Reports are intentionally send-blocked until Phase 4B.3;
@@ -172,6 +173,8 @@ export const FillReportModal: React.FC<FillReportModalProps> = ({ template, onCl
             mode="edit"
             onChange={setFormData}
             errors={errors}
+            reportId={reportToEdit?.id}
+            ensureReportId={async () => (await ensurePersistedReport()).id}
             activeSignatures={reportToEdit?.activeSignatures}
             signatureHistory={reportToEdit?.signatureHistory}
             currentUser={currentUser}

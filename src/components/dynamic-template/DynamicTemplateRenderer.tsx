@@ -15,6 +15,7 @@ interface DynamicTemplateRendererProps {
   signatureHistory?: any[];
   currentUser?: any;
   reportId?: string;
+  ensureReportId?: () => Promise<string>;
 }
 
 export const DynamicTemplateRenderer: React.FC<DynamicTemplateRendererProps> = ({
@@ -28,6 +29,7 @@ export const DynamicTemplateRenderer: React.FC<DynamicTemplateRendererProps> = (
   signatureHistory,
   currentUser,
   reportId,
+  ensureReportId,
 }) => {
   // Structured snapshot sections are authoritative for order and layout. Older
   // snapshots may only have a flat fields/components array, so retain that
@@ -132,6 +134,7 @@ export const DynamicTemplateRenderer: React.FC<DynamicTemplateRendererProps> = (
                   signatureHistory={signatureHistory}
                   currentUser={currentUser}
                   reportId={reportId}
+                  ensureReportId={ensureReportId}
                 />
               );
             })}

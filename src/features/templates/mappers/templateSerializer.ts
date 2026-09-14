@@ -73,6 +73,7 @@ export function deserializeTemplateRow(row: any, sections: any[] = [], fields: a
     creationMethod: row.creation_method, dynamicSections: mappedSections, sections: mappedSections.map((s) => s.title),
     components, fields: components as any, requestedApprovalFromUserId: row.assigned_reviewer_user_id ?? row.routing_specific_user_id,
     requestedApprovalFromName: row.assigned_reviewer_name_snapshot, rejectionReason: row.rejection_reason,
+    returnReason: row.return_reason ?? undefined, returnedAt: row.returned_at ?? undefined,
     theme: row.theme, headerConfig: row.header_config, footerConfig: row.footer_config,
   };
 }

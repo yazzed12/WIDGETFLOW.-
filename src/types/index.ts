@@ -594,6 +594,8 @@ export interface WidgetTemplate {
   requestedApprovalFromUserId?: string;
   requestedApprovalFromName?: string;
   rejectionReason?: string;
+  returnReason?: string;
+  returnedAt?: string;
   theme?: TemplateTheme;
   headerConfig?: HeaderConfig;
   footerConfig?: FooterConfig;

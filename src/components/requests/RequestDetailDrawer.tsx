@@ -2,7 +2,7 @@ import React from 'react';
 import type { WidgetTemplate } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { RequestCommentThread } from '../approvals/RequestCommentThread';
-import { X, Clock, CheckCircle2, XCircle, AlertCircle, Edit3, Send, Shield, User as UserIcon, Calendar, FileText } from 'lucide-react';
+import { X, Clock, CheckCircle2, XCircle, AlertCircle, Edit3, Send, Shield, User as UserIcon, Calendar, FileText, RotateCcw } from 'lucide-react';
 
 interface RequestDetailDrawerProps {
   template: WidgetTemplate;
@@ -46,6 +46,13 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
             Rejected
           </span>
         );
+      case 'Returned for Revision':
+        return (
+          <span className="bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5">
+            <RotateCcw className="w-4 h-4 text-amber-600" />
+            Returned for Revision
+          </span>
+        );
       default:
         return (
           <span className="bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold px-3 py-1 rounded-full">
@@ -81,7 +88,7 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
         <div className="p-6 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              {getStatusBadge(template.status)}
+              {getStatusBadge(template.status === 'Draft' && template.returnedAt ? 'Returned for Revision' : template.status)}
               <span className="text-xs font-semibold text-slate-500">{categoryName}</span>
             </div>
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">{template.name}</h2>
@@ -107,6 +114,16 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
               <p className="text-rose-700">
                 {template.rejectionReason || 'The approver has requested revisions to this template configuration before approval.'}
               </p>
+            </div>
+          )}
+
+          {template.status === 'Draft' && template.returnedAt && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs text-amber-900">
+              <div className="flex items-center gap-2 font-bold text-amber-800">
+                <RotateCcw className="w-4 h-4 text-amber-600" />
+                Template Returned for Revision
+              </div>
+              <p className="text-amber-700">{template.returnReason || 'Please update this template before resubmitting it for approval.'}</p>
             </div>
           )}
 
@@ -213,15 +230,17 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
                 className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Edit3 className="w-4 h-4" />
-                <span>Continue Editing</span>
+                <span>{template.returnedAt ? 'Edit & Resubmit' : 'Continue Editing'}</span>
               </button>
-              <button
-                onClick={handleSubmitDraftDirectly}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Send className="w-4 h-4" />
-                <span>Submit for Approval</span>
-              </button>
+              {!template.returnedAt && (
+                <button
+                  onClick={handleSubmitDraftDirectly}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Submit for Approval</span>
+                </button>
+              )}
             </div>
           )}
 

@@ -4,8 +4,9 @@ import { useApp } from '../../context/AppContext';
 import { RequestCommentThread } from './RequestCommentThread';
 import { ApproveConfirmModal } from './ApproveConfirmModal';
 import { RejectModal } from './RejectModal';
+import { ReturnTemplateModal } from './ReturnTemplateModal';
 import { DynamicTemplateRenderer } from '../dynamic-template/DynamicTemplateRenderer';
-import { X, CheckCircle2, XCircle, Clock, Sparkles, User as UserIcon, Calendar, FileText } from 'lucide-react';
+import { X, CheckCircle2, XCircle, Clock, Sparkles, User as UserIcon, Calendar, FileText, RotateCcw } from 'lucide-react';
 
 interface ApprovalDetailDrawerProps {
   template: WidgetTemplate;
@@ -18,21 +19,28 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
     approvalRecords,
     approveTemplate,
     rejectTemplate,
+    returnTemplateForRevision,
     currentUser,
     hasPermission,
   } = useApp();
 
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
 
   const categoryName = categories.find((c) => c.id === template.categoryId)?.name || 'General';
 
   // Filter audit history records for this template
   const history = approvalRecords.filter((r) => r.templateId === template.id);
 
-  const isAssignedApprover =
+  // The pending-approval collection is already RLS-filtered by the canonical
+  // reviewer helper. A ROLE_QUEUE item may therefore be unclaimed (null
+  // reviewer) and still actionable by this eligible reviewer.
+  const canReviewTemplate =
     template.status === 'Pending Approval' &&
-    template.requestedApprovalFromUserId === currentUser.id;
+    template.createdById !== currentUser.id &&
+    (!template.requestedApprovalFromUserId || template.requestedApprovalFromUserId === currentUser.id) &&
+    hasPermission('template_approvals.view');
 
   const handleApproveConfirm = () => {
     approveTemplate(template.id);
@@ -164,7 +172,7 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
               Close
             </button>
 
-            {isAssignedApprover && (hasPermission('template_approvals.approve') || hasPermission('template_approvals.reject')) && (
+            {canReviewTemplate && (hasPermission('template_approvals.approve') || hasPermission('template_approvals.reject')) && (
               <div className="flex items-center gap-2">
                 {hasPermission('template_approvals.reject') && <button
                   onClick={() => setShowRejectModal(true)}
@@ -172,6 +180,14 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
                 >
                   <XCircle className="w-4 h-4" />
                   <span>Reject</span>
+                </button>}
+
+                {hasPermission('template_approvals.reject') && hasPermission('template_approvals.approve') && <button
+                  onClick={() => setShowReturnModal(true)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Return for Revision</span>
                 </button>}
 
                 {hasPermission('template_approvals.approve') && <button
@@ -200,6 +216,16 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
           template={template}
           onConfirm={handleRejectConfirm}
           onClose={() => setShowRejectModal(false)}
+        />
+      )}
+      {showReturnModal && (
+        <ReturnTemplateModal
+          template={template}
+          onConfirm={(reason) => {
+            void returnTemplateForRevision(template.id, reason);
+            setShowReturnModal(false);
+          }}
+          onClose={() => setShowReturnModal(false)}
         />
       )}
     </>

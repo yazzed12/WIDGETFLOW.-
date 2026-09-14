@@ -111,6 +111,8 @@ export function mapReportRow(row: any): ReportInstance {
     lockedAt: row.locked_at,
     sentAt: row.sent_at,
     senderNote: row.sender_note,
+    returnReason: row.return_reason ?? null,
+    returnedAt: row.returned_at ?? null,
     rejectionReason: row.rejection_reason ?? null,
     rejectedAt: row.rejected_at ?? null,
     createdAt: row.created_at,

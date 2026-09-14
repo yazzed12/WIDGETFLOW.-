@@ -767,13 +767,19 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ initialTemplat
   const handleSaveDraft = async () => {
     if (templateState.status === 'Approved') return;
     if (!validateBuilderSchema()) return;
+    // Keep the return-for-revision context visible while the creator makes
+    // incremental draft saves. Retain the loaded metadata in the editor state
+    // if a save response omits it.
+    const returnContext = templateState.returnedAt
+      ? { returnedAt: templateState.returnedAt, returnReason: templateState.returnReason }
+      : {};
     try {
       setIsSaving(true);
       setBuilderError(null);
 
       const saved = await templateService.saveDraft(templateState);
       await refreshTemplates();
-      setTemplateState(setupInitialState(saved));
+      setTemplateState(setupInitialState({ ...saved, ...returnContext }));
       setIsDirty(false);
     } catch (err: any) {
       setBuilderError(err.message || 'Failed to save template draft.');
@@ -911,6 +917,13 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ initialTemplat
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {templateState.returnedAt && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 text-xs text-amber-900">
+          <div className="font-bold text-amber-800">Returned for Revision</div>
+          <div className="mt-0.5">{templateState.returnReason || 'Please update this template before resubmitting it for approval.'}</div>
         </div>
       )}
 

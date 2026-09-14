@@ -19,7 +19,39 @@ export type ErrorCode =
   | 'SIGNATURE_ASSET_NOT_FOUND'
   | 'SIGNATURE_ASSET_NOT_REFERENCED_BY_REPORT'
   | 'REPORT_NOT_VISIBLE'
+  | 'ASSET_STORAGE_UPLOAD_FAILED'
+  | 'ASSET_METADATA_REGISTRATION_FAILED'
+  | 'ASSET_HASH_FAILED'
+  | 'ASSET_GATEWAY_UNEXPECTED_FAILURE'
+  | 'ASSET_LINK_REQUIRED'
+  | 'ASSET_LINK_PERMISSION_QUERY_FAILED'
+  | 'ASSET_LINK_REPORT_LOOKUP_FAILED'
   | 'INTERNAL_ERROR';
+
+const SAFE_FAILURE_STAGES = new Set([
+  'authentication',
+  'principal_resolution',
+  'request_parsing',
+  'validation',
+  'link_authorization',
+  'payload_decoding',
+  'hashing',
+  'storage_upload',
+  'metadata_insert',
+  'metadata_lookup',
+  'storage_download',
+  'rollback',
+  'response_serialization',
+  'unexpected',
+]);
+
+const SAFE_AUTH_STEPS = new Set([
+  'permission_query',
+  'report_lookup',
+  'ownership_check',
+  'permission_check',
+  'authorization_complete',
+]);
 
 export class ApiError extends Error {
   constructor(
@@ -100,6 +132,12 @@ const SAFE_DATABASE_ERRORS: Record<
     400,
     'INVALID_INPUT',
     'The request is invalid.',
+  ],
+
+  ASSET_LINK_REQUIRED: [
+    400,
+    'ASSET_LINK_REQUIRED',
+    'The asset must be linked to its parent record.',
   ],
 
   MANAGER_NOT_ACTIVE: [
@@ -186,6 +224,9 @@ export function corsHeaders(
      */
     'Access-Control-Allow-Methods':
       'GET, POST, OPTIONS',
+
+    'Access-Control-Expose-Headers':
+      'X-Request-ID, X-WidgetFlow-Stage, X-WidgetFlow-Auth-Step',
 
     'Access-Control-Max-Age':
       '600',
@@ -282,7 +323,19 @@ export function databaseError(
 export function failure(
   request: Request,
   error: unknown,
+  requestId?: string,
+  stage?: string,
+  authStep?: string,
 ): Response {
+  const safeStage =
+    stage && SAFE_FAILURE_STAGES.has(stage)
+      ? stage
+      : 'unexpected';
+  const safeAuthStep =
+    authStep && SAFE_AUTH_STEPS.has(authStep)
+      ? authStep
+      : null;
+
   let safe =
     error instanceof ApiError
       ? error
@@ -309,8 +362,12 @@ export function failure(
       }),
       {
         status: safe.status,
-        headers:
-          corsHeaders(request),
+        headers: {
+          ...corsHeaders(request),
+          'X-Request-ID': requestId ?? crypto.randomUUID(),
+          'X-WidgetFlow-Stage': safeStage,
+          ...(safeAuthStep ? { 'X-WidgetFlow-Auth-Step': safeAuthStep } : {}),
+        },
       },
     );
   } catch (corsError) {
@@ -338,6 +395,9 @@ export function failure(
             'application/json; charset=utf-8',
           'Cache-Control':
             'no-store',
+          'X-Request-ID': requestId ?? crypto.randomUUID(),
+          'X-WidgetFlow-Stage': safeStage,
+          ...(safeAuthStep ? { 'X-WidgetFlow-Auth-Step': safeAuthStep } : {}),
         },
       },
     );

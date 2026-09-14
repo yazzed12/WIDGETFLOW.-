@@ -37,6 +37,7 @@ export const templateRepository = {
   async claimReview(id: string) { const { data, error } = await getSupabaseBrowserClient().rpc('claim_template_review', { p_template_id: id }); return unwrap(required(data, error)); },
   async approve(id: string) { const { data, error } = await getSupabaseBrowserClient().rpc('approve_template', { p_template_id: id }); return unwrap(required(data, error)); },
   async reject(id: string, reason: string) { const { data, error } = await getSupabaseBrowserClient().rpc('reject_template', { p_template_id: id, p_reason: reason }); return unwrap(required(data, error)); },
+  async returnForRevision(id: string, reason: string) { const { data, error } = await getSupabaseBrowserClient().rpc('return_template_for_revision', { p_template_id: id, p_reason: reason }); return unwrap(required(data, error)); },
   async createRevision(id: string) { const { data, error } = await getSupabaseBrowserClient().rpc('create_template_revision', { p_template_id: id }); const value = unwrap(required(data, error)) as any; return this.getTemplateById(value.id); },
   async addComment(id: string, message: string) { const { data, error } = await getSupabaseBrowserClient().rpc('add_template_comment', { p_template_id: id, p_message: message }); return required(data, error) as any; },
 };

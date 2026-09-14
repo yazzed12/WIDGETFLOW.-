@@ -154,6 +154,12 @@ export const MyRequestsPage: React.FC = () => {
 
                   <p className="text-xs text-slate-500 line-clamp-1">{req.description}</p>
 
+                  {req.status === 'Draft' && req.returnedAt && (
+                    <p className="text-xs text-amber-700 line-clamp-2">
+                      <span className="font-semibold">Reason:</span> {req.returnReason || 'Please update this template before resubmitting it for approval.'}
+                    </p>
+                  )}
+
                   <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 mt-2">
                     <span>Created: {new Date(req.createdAt).toLocaleDateString()}</span>
                     <span>•</span>
@@ -166,7 +172,10 @@ export const MyRequestsPage: React.FC = () => {
 
                 <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
                   <div>
-                    <StatusBadge status={req.status} />
+                    <StatusBadge
+                      status={req.status === 'Draft' && req.returnedAt ? 'Returned' : req.status}
+                      type="template"
+                    />
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -182,25 +191,27 @@ export const MyRequestsPage: React.FC = () => {
                           <Edit3 className="w-3.5 h-3.5" />
                           <span>Edit</span>
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            submitTemplateForApproval(
-                              {
-                                name: req.name,
-                                categoryId: req.categoryId,
-                                description: req.description,
-                                tags: req.tags,
-                                layoutType: req.layoutType,
-                              },
-                              req.id
-                            );
-                          }}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>Submit</span>
-                        </button>
+                        {!req.returnedAt && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              submitTemplateForApproval(
+                                {
+                                  name: req.name,
+                                  categoryId: req.categoryId,
+                                  description: req.description,
+                                  tags: req.tags,
+                                  layoutType: req.layoutType,
+                                },
+                                req.id
+                              );
+                            }}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Submit</span>
+                          </button>
+                        )}
                       </>
                     )}
 

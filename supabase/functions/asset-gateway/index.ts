@@ -1,6 +1,10 @@
 import { verifyCaller } from '../_shared/auth.ts';
 import { requireProtectedAdmin } from '../_shared/adminAuthorization.ts';
 import {
+  canWriteReportAttachment,
+  hasReportAttachmentPermission,
+} from '../_shared/reportAttachmentAuthorization.ts';
+import {
   ApiError,
   corsHeaders,
   databaseError,
@@ -30,13 +34,40 @@ const TYPES = new Set([
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const SAFE_GATEWAY_STAGES = new Set([
+  'authentication',
+  'principal_resolution',
+  'request_parsing',
+  'validation',
+  'link_authorization',
+  'payload_decoding',
+  'hashing',
+  'storage_upload',
+  'metadata_insert',
+  'metadata_lookup',
+  'storage_download',
+  'rollback',
+  'response_serialization',
+  'unexpected',
+]);
+
 type VerifiedCaller = Awaited<ReturnType<typeof verifyCaller>>;
+
+type LinkAuthorizationStep =
+  | 'permission_query'
+  | 'report_lookup'
+  | 'ownership_check'
+  | 'permission_check'
+  | 'authorization_complete';
 
 type CanonicalPrincipal = {
   userId: string;
   roleId: string;
   fullName: string | null;
   roleKey: string | null;
+  profileStatus: string;
+  roleActive: boolean;
+  effectivePermissions: string[];
 };
 
 function extensionForMime(mime: string): string {
@@ -119,6 +150,72 @@ function decodeBase64(value: string): Uint8Array {
   }
 }
 
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(
+      new Uint8Array(digest),
+      (byte) => byte.toString(16).padStart(2, '0'),
+    ).join('');
+  } catch {
+    throw new ApiError(
+      500,
+      'ASSET_HASH_FAILED',
+      'Asset preparation failed.',
+    );
+  }
+}
+
+function logUploadStage(requestId: string, stage: string, result: 'started' | 'succeeded' | 'failed', errorCode?: string): void {
+  console.info(JSON.stringify({
+    component: 'asset-gateway',
+    requestId,
+    stage,
+    result,
+    ...(errorCode ? { errorCode } : {}),
+  }));
+}
+
+function logAuthorizationStep(
+  requestId: string,
+  authStep: LinkAuthorizationStep,
+  result: 'started' | 'succeeded' | 'failed' | 'denied',
+  diagnosticCode?: string,
+): void {
+  console.info(JSON.stringify({
+    component: 'asset-gateway',
+    requestId,
+    stage: 'link_authorization',
+    authStep,
+    result,
+    ...(diagnosticCode ? { diagnosticCode } : {}),
+  }));
+}
+
+function logPostgrestFailure(
+  requestId: string,
+  operation: 'report_lookup',
+  error: {
+    code?: unknown;
+    message?: unknown;
+    details?: unknown;
+    hint?: unknown;
+  },
+): void {
+  console.error(JSON.stringify({
+    component: 'asset-gateway',
+    requestId,
+    stage: 'link_authorization',
+    operation,
+    error: {
+      code: typeof error.code === 'string' ? error.code : null,
+      message: typeof error.message === 'string' ? error.message : null,
+      details: typeof error.details === 'string' ? error.details : null,
+      hint: typeof error.hint === 'string' ? error.hint : null,
+    },
+  }));
+}
+
 async function exactObjectExists(
   client: any,
   bucket: string,
@@ -179,11 +276,26 @@ async function getCanonicalPrincipal(
       ? row.role_id
       : null;
 
+  const profileStatus =
+    typeof row?.profile_status === 'string'
+      ? row.profile_status
+      : '';
+
+  const roleActive = row?.role_active === true;
+
+  const effectivePermissions = Array.isArray(row?.effective_permissions)
+    ? row.effective_permissions.filter(
+        (permission): permission is string => typeof permission === 'string',
+      )
+    : [];
+
   if (
     !userId ||
     !roleId ||
     !UUID_RE.test(userId) ||
-    !UUID_RE.test(roleId)
+    !UUID_RE.test(roleId) ||
+    profileStatus.toLowerCase() !== 'active' ||
+    !roleActive
   ) {
     throw new ApiError(
       403,
@@ -203,6 +315,9 @@ async function getCanonicalPrincipal(
       typeof row?.role_key === 'string'
         ? row.role_key
         : null,
+    profileStatus,
+    roleActive,
+    effectivePermissions,
   };
 }
 
@@ -210,6 +325,7 @@ async function hasAnyPermission(
   verified: VerifiedCaller,
   roleId: string,
   permissionKeys: string[],
+  queryFailureCode?: 'ASSET_LINK_PERMISSION_QUERY_FAILED',
 ): Promise<boolean> {
   const { data, error } = await verified.adminClient
     .from('role_permissions')
@@ -218,6 +334,13 @@ async function hasAnyPermission(
     .in('permission_key', permissionKeys);
 
   if (error) {
+    if (queryFailureCode) {
+      throw new ApiError(
+        500,
+        queryFailureCode,
+        'The operation could not be completed.',
+      );
+    }
     throw databaseError(error);
   }
 
@@ -227,7 +350,9 @@ async function hasAnyPermission(
 async function requireReportAttachmentWriteAccess(
   verified: VerifiedCaller,
   principal: CanonicalPrincipal,
-  reportId?: string,
+  reportId: string,
+  onStep: (step: LinkAuthorizationStep) => void,
+  requestId: string,
 ): Promise<void> {
   /*
    * Preserve the established report upload permission vocabulary:
@@ -241,42 +366,59 @@ async function requireReportAttachmentWriteAccess(
    * A returned report is moved back to Draft by the canonical
    * return_report RPC, so returned-correction uploads are still covered.
    */
-  const permitted = await hasAnyPermission(
-    verified,
-    principal.roleId,
-    reportId ? ['reports.edit_draft'] : ['reports.create'],
-  );
-
-  if (!permitted) {
+  onStep('permission_check');
+  if (!hasReportAttachmentPermission(principal)) {
+    logAuthorizationStep(requestId, 'permission_check', 'denied');
     throw new ApiError(
       403,
       'FORBIDDEN',
       'You are not authorized to upload attachments to reports.',
     );
   }
+  logAuthorizationStep(requestId, 'permission_check', 'succeeded');
 
-  if (!reportId) return;
+  onStep('report_lookup');
+  logAuthorizationStep(requestId, 'report_lookup', 'started');
+  /*
+   * Use the same authenticated client that resolved current_principal().
+   * public.reports RLS remains the visibility boundary, while the explicit
+   * checks below additionally enforce exact ownership and Draft lifecycle.
+   * The service-role client intentionally has no direct SELECT grant here.
+   */
   const { data: report, error } = await verified.userClient
     .from('reports')
-    .select('id,created_by_user_id,status')
+    .select('id,created_by_user_id,status,locked_at')
     .eq('id', reportId)
     .maybeSingle();
 
   if (error) {
-    throw databaseError(error);
+    logPostgrestFailure(requestId, 'report_lookup', error);
+    logAuthorizationStep(
+      requestId,
+      'report_lookup',
+      'failed',
+      'ASSET_LINK_REPORT_LOOKUP_FAILED',
+    );
+    throw new ApiError(
+      500,
+      'ASSET_LINK_REPORT_LOOKUP_FAILED',
+      'The operation could not be completed.',
+    );
   }
+  logAuthorizationStep(requestId, 'report_lookup', 'succeeded');
 
-  if (
-    !report ||
-    report.created_by_user_id !== principal.userId ||
-    String(report.status).toLowerCase() !== 'draft'
-  ) {
+  onStep('ownership_check');
+  if (!canWriteReportAttachment(principal, report)) {
+    logAuthorizationStep(requestId, 'ownership_check', 'denied');
     throw new ApiError(
       403,
       'FORBIDDEN',
       'This report cannot accept attachments from the current user.',
     );
   }
+  logAuthorizationStep(requestId, 'ownership_check', 'succeeded');
+  onStep('authorization_complete');
+  logAuthorizationStep(requestId, 'authorization_complete', 'succeeded');
 }
 
 async function requireTemplateAssetWriteAccess(
@@ -376,13 +518,19 @@ async function canReadTemplate(
 }
 
 Deno.serve(async (request) => {
+  const requestId = crypto.randomUUID();
+  let stage = 'unexpected';
+  let authStep: LinkAuthorizationStep | undefined;
+
   try {
+    stage = 'request_parsing';
     const options = preflight(request);
 
     if (options) {
       return options;
     }
 
+    stage = 'authentication';
     const verified = await verifyCaller(request);
 
     /*
@@ -394,6 +542,7 @@ Deno.serve(async (request) => {
      *
      * principal.userId is used for business-domain profile FKs.
      */
+    stage = 'principal_resolution';
     const principal = await getCanonicalPrincipal(verified);
 
     const url = new URL(request.url);
@@ -401,6 +550,7 @@ Deno.serve(async (request) => {
     let postBody: Record<string, unknown> | null = null;
 
     if (request.method === 'POST') {
+      stage = 'request_parsing';
       postBody =
         await request.json() as Record<string, unknown>;
 
@@ -410,9 +560,16 @@ Deno.serve(async (request) => {
         const assetId = String(body.assetId ?? ''), reportId = String(body.reportId ?? '');
         if (!UUID_RE.test(assetId) || !UUID_RE.test(reportId)) throw new ApiError(400, 'INVALID_INPUT', 'Asset and report ids must be valid UUIDs.');
         const p = await getCanonicalPrincipal(verified);
-        if (!(await hasAnyPermission(verified, p.roleId, ['reports.create', 'reports.edit_draft']))) throw new ApiError(403, 'FORBIDDEN', 'Report attachment permission is required.');
-        const { data: report } = await verified.userClient.from('reports').select('id,created_by_user_id,status').eq('id', reportId).maybeSingle();
-        if (!report || report.created_by_user_id !== p.userId || String(report.status).toLowerCase() !== 'draft') throw new ApiError(403, 'FORBIDDEN', 'Only an owned draft report can receive a staged attachment.');
+        stage = 'link_authorization';
+        await requireReportAttachmentWriteAccess(
+          verified,
+          p,
+          reportId,
+          (step) => {
+            authStep = step;
+          },
+          requestId,
+        );
         const { data: asset } = await verified.adminClient.from('asset_metadata').select('id,bucket_name,asset_purpose,lifecycle_state,owner_user_id,linked_report_id,linked_template_id').eq('id', assetId).maybeSingle();
         if (!asset || asset.bucket_name !== BUCKET || asset.asset_purpose !== 'report_attachment' || asset.lifecycle_state !== 'active' || asset.owner_user_id !== p.userId || asset.linked_report_id || asset.linked_template_id) throw new ApiError(409, 'INVALID_INPUT', 'The staged asset cannot be linked.');
         const { data: updated, error: updateError } = await verified.adminClient.from('asset_metadata').update({ linked_report_id: reportId }).eq('id', assetId).eq('owner_user_id', p.userId).is('linked_report_id', null).is('linked_template_id', null).select('id').maybeSingle();
@@ -627,6 +784,7 @@ Deno.serve(async (request) => {
         linkedTemplateId?: string;
         linkedReportId?: string;
       };
+      logUploadStage(requestId, 'upload', 'started');
 
       const mime =
         String(body.mimeType ?? '')
@@ -647,6 +805,7 @@ Deno.serve(async (request) => {
       const purpose =
         String(body.purpose ?? '');
 
+      stage = 'validation';
       if (!ALLOWED_PURPOSES.has(purpose)) {
         throw new ApiError(
           400,
@@ -658,13 +817,14 @@ Deno.serve(async (request) => {
       if (
         purpose === 'report_attachment' &&
         (
+          !body.linkedReportId ||
           body.linkedTemplateId
         )
       ) {
         throw new ApiError(
           400,
-          'INVALID_INPUT',
-          'Report attachments require exactly one report link.',
+          'ASSET_LINK_REQUIRED',
+          'The asset must be linked to its parent record.',
         );
       }
 
@@ -694,14 +854,24 @@ Deno.serve(async (request) => {
           'Linked resource id must be a valid UUID.',
         );
       }
-      if (purpose === 'report_attachment' && linkedId !== undefined && (typeof linkedId !== 'string' || !UUID_RE.test(linkedId))) throw new ApiError(400, 'INVALID_INPUT', 'Linked report id must be a valid UUID.');
+      if (purpose === 'report_attachment' && (typeof linkedId !== 'string' || !UUID_RE.test(linkedId))) throw new ApiError(400, 'INVALID_INPUT', 'Linked report id must be a valid UUID.');
 
       /*
        * Authorization happens BEFORE Storage upload.
        */
       if (purpose === 'report_attachment') {
-        await requireReportAttachmentWriteAccess(verified, principal, typeof linkedId === 'string' ? linkedId : undefined);
+        stage = 'link_authorization';
+        await requireReportAttachmentWriteAccess(
+          verified,
+          principal,
+          linkedId as string,
+          (step) => {
+            authStep = step;
+          },
+          requestId,
+        );
       } else {
+        stage = 'link_authorization';
         await requireTemplateAssetWriteAccess(
           verified,
           principal,
@@ -709,6 +879,7 @@ Deno.serve(async (request) => {
         );
       }
 
+      stage = 'payload_decoding';
       const encoded =
         extractBase64Payload(
           body.base64Data,
@@ -753,6 +924,12 @@ Deno.serve(async (request) => {
         );
       }
 
+      // Hash the exact decoded bytes that will be uploaded to Storage.
+      // This runs before upload, so a hashing failure cannot create an orphan.
+      stage = 'hashing';
+      const contentHash = await sha256Hex(data);
+      logUploadStage(requestId, 'hash', 'succeeded');
+
       /*
        * Physical Storage paths remain scoped by the current
        * authenticated Auth UUID.
@@ -763,6 +940,7 @@ Deno.serve(async (request) => {
         `${purpose}/${verified.user.id}/` +
         `${crypto.randomUUID()}.${extensionForMime(mime)}`;
 
+      stage = 'storage_upload';
       const {
         error: uploadError,
       } = await verified.adminClient.storage
@@ -777,13 +955,16 @@ Deno.serve(async (request) => {
         );
 
       if (uploadError) {
+        logUploadStage(requestId, 'storage_upload', 'failed', 'ASSET_STORAGE_UPLOAD_FAILED');
         throw new ApiError(
           502,
-          'INTERNAL_ERROR',
-          'Asset upload failed.',
+          'ASSET_STORAGE_UPLOAD_FAILED',
+          'The file could not be uploaded.',
         );
       }
+      logUploadStage(requestId, 'storage_upload', 'succeeded');
 
+      stage = 'metadata_insert';
       const {
         data: asset,
         error: metadataError,
@@ -817,6 +998,7 @@ Deno.serve(async (request) => {
 
           mime_type: mime,
           byte_size: data.byteLength,
+          content_hash: contentHash,
           lifecycle_state: 'active',
           is_immutable: false,
         })
@@ -830,13 +1012,26 @@ Deno.serve(async (request) => {
          * DB registration failed after physical upload.
          * Remove ONLY the exact object created by this request.
          */
-        await verified.adminClient.storage
-          .from(BUCKET)
-          .remove([objectPath]);
+        logUploadStage(requestId, 'metadata_insert', 'failed', 'ASSET_METADATA_REGISTRATION_FAILED');
+        stage = 'rollback';
+        try {
+          await verified.adminClient.storage
+            .from(BUCKET)
+            .remove([objectPath]);
+          logUploadStage(requestId, 'rollback', 'succeeded');
+        } catch {
+          logUploadStage(requestId, 'rollback', 'failed', 'ASSET_METADATA_REGISTRATION_FAILED');
+        }
 
-        throw databaseError(metadataError);
+        throw new ApiError(
+          500,
+          'ASSET_METADATA_REGISTRATION_FAILED',
+          'The operation could not be completed.',
+        );
       }
+      logUploadStage(requestId, 'metadata_insert', 'succeeded');
 
+      stage = 'response_serialization';
       return success(request, {
         id: asset.id,
         filename: asset.original_filename,
@@ -872,6 +1067,7 @@ Deno.serve(async (request) => {
        * Service role is used only to resolve physical metadata.
        * Authorization is performed below before bytes are read.
        */
+      stage = 'metadata_lookup';
       const {
         data: asset,
         error: metadataError,
@@ -969,6 +1165,7 @@ Deno.serve(async (request) => {
         );
       }
 
+      stage = 'storage_download';
       const {
         data: object,
         error: downloadError,
@@ -1016,6 +1213,30 @@ Deno.serve(async (request) => {
       'Unsupported method.',
     );
   } catch (error) {
-    return failure(request, error);
+    const safeError =
+      error instanceof ApiError &&
+      error.code !== 'INTERNAL_ERROR'
+        ? error
+        : new ApiError(
+            error instanceof ApiError ? error.status : 500,
+            'ASSET_GATEWAY_UNEXPECTED_FAILURE',
+            'The operation could not be completed.',
+          );
+
+    console.error(JSON.stringify({
+      component: 'asset-gateway',
+      requestId,
+      stage,
+      diagnosticCode: safeError.code,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+
+    return failure(
+      request,
+      safeError,
+      requestId,
+      SAFE_GATEWAY_STAGES.has(stage) ? stage : 'unexpected',
+      authStep,
+    );
   }
 });

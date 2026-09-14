@@ -7,6 +7,20 @@ import type {
 } from '../types';
 import { httpRequest } from './httpClient';
 
+export type AssetGatewayUploadPayload = {
+  filename?: string;
+  mimeType?: string;
+  base64Data: string;
+  purpose?: string;
+  linkedReportId?: string;
+};
+
+export function buildAssetGatewayUploadBody(
+  payload: AssetGatewayUploadPayload,
+): AssetGatewayUploadPayload {
+  return { ...payload };
+}
+
 export { ApiError } from './httpClient';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -190,8 +204,9 @@ export const apiService = {
   },
 
   // Assets Upload
-  async uploadAsset(payload: { filename?: string; mimeType?: string; base64Data: string; purpose?: string; linkedReportId?: string }): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
-    const { data, error } = await (await import('../lib/supabase/client')).getSupabaseBrowserClient().functions.invoke('asset-gateway', { body: payload });
+  async uploadAsset(payload: AssetGatewayUploadPayload): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
+    const body = buildAssetGatewayUploadBody(payload);
+    const { data, error } = await (await import('../lib/supabase/client')).getSupabaseBrowserClient().functions.invoke('asset-gateway', { body });
     if (error) throw error;
     return ((data as any)?.data ?? data) as any;
   },
