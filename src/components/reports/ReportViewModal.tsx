@@ -5,6 +5,7 @@ import { useSystemConfig } from '../../context/SystemConfigContext';
 import { ReportCommentThread } from './ReportCommentThread';
 import { DynamicTemplateRenderer } from '../dynamic-template/DynamicTemplateRenderer';
 import { normalizeReportTemplateSnapshot } from '../../shared/signatureResolver';
+import { formatDateTime } from '../../shared/dateTime';
 import {
   X,
   FileText,
@@ -233,7 +234,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
               <span className="text-[10px] text-slate-400 uppercase font-semibold block">Date Created</span>
               <span className="font-medium text-slate-700 flex items-center gap-1 mt-0.5">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                {new Date(report.createdAt).toLocaleDateString()}
+                {formatDateTime(report.createdAt)}
               </span>
             </div>
             <div>
@@ -388,6 +389,9 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                 mode="readOnly"
                 activeSignatures={report.activeSignatures}
                 signatureHistory={report.signatureHistory}
+                signatureAssignments={report.signatureAssignments}
+                signatureConfigurations={report.signatureConfigurations}
+                assignments={report.assignments}
                 currentUser={currentUser}
                 reportId={report.id}
               />

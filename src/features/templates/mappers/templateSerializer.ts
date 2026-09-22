@@ -30,11 +30,24 @@ export function serializeTemplateDraft(template: WidgetTemplate): TemplateDraftP
     tags: template.tags ?? [],
     sections: sections.map((section) => ({
       ...section,
-      components: section.components.map((component) => ({
-        ...component,
-        key: component.key || component.id,
-        order: globalOrder++,
-      })) as TemplateComponent[],
+      components: section.components.map((component) => {
+        const signatureConfig = component.type === 'signature'
+          ? (component.signatureConfig ?? (component as any).signature_config ?? (component as any).configuration?.signatureConfig ?? (component as any).configuration ?? {})
+          : undefined;
+        return {
+          ...component,
+          key: component.key || component.id,
+          ...(signatureConfig ? {
+            signatureConfig: {
+              signatureRole: String(signatureConfig.signatureRole ?? signatureConfig.signature_role ?? 'receiver').toLowerCase() === 'sender' ? 'Sender' : 'Receiver',
+              requiredRole: String(signatureConfig.requiredRole ?? signatureConfig.required_role ?? signatureConfig.required_role_key ?? '').trim() || undefined,
+              assignmentPolicy: signatureConfig.assignmentPolicy ?? signatureConfig.assignment_policy ?? 'fixed',
+              ...(String(signatureConfig.label ?? component.label ?? '').trim() ? { label: String(signatureConfig.label ?? component.label ?? '').trim() } : {}),
+            },
+          } : {}),
+          order: globalOrder++,
+        };
+      }) as TemplateComponent[],
     })),
     rules: template.workflow?.rules ?? [],
     calculations: template.workflow?.calculations ?? [],

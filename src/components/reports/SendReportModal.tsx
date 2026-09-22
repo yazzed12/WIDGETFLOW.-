@@ -5,34 +5,14 @@ import { X, Send, AlertCircle, PenTool, ExternalLink } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 import { ReportSignatureModal } from '../report/ReportSignatureModal';
 import { UserSignatureSettingsModal } from '../user/UserSignatureSettingsModal';
-import { reportService } from '../../features/reports/reportService';
+import { normalizeRoleKey, reportService, resolveCanonicalRecipientRoleKey } from '../../features/reports/reportService';
+import { resolveEffectiveReportSignatureFields } from '../../shared/signatureResolver';
+import { normalizeError } from '../../lib/errors/errorHandling';
 
 interface SendReportModalProps {
   report: ReportInstance;
   onClose: () => void;
 }
-
-const signatureRole = (component: any) => String(
-  component?.signatureConfig?.signatureRole ??
-  component?.signatureRole ??
-  component?.configuration?.signatureConfig?.signatureRole ??
-  component?.configuration?.signatureRole ??
-  '',
-).trim().toLowerCase();
-
-const fieldType = (component: any) => String(
-  component?.field_type ?? component?.type ?? component?.configuration?.field_type ?? component?.configuration?.type ?? '',
-).trim().toLowerCase();
-
-const businessFieldKey = (component: any) => String(
-  component?.field_key ?? component?.key ?? component?.configuration?.field_key ?? component?.configuration?.key ?? '',
-).trim();
-
-const requiredField = (component: any) => Boolean(
-  component?.is_required ?? component?.required ?? component?.configuration?.is_required ??
-  component?.configuration?.required ?? component?.signatureConfig?.required ??
-  component?.configuration?.signatureConfig?.required,
-);
 
 export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClose }) => {
   const { currentUser, templates, sendReport } = useApp();
@@ -41,7 +21,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
   const [availableRecipients, setAvailableRecipients] = useState<any[]>([]);
   const [directoryLoading, setDirectoryLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  useEffect(() => { let mounted = true; void reportService.listRecipientDirectory().then((rows) => { if (mounted) setAvailableRecipients(rows); }).catch((err) => { if (mounted) setError(err.message || 'Unable to load recipients.'); }).finally(() => { if (mounted) setDirectoryLoading(false); }); return () => { mounted = false; }; }, []);
+  useEffect(() => { let mounted = true; void reportService.listRecipientDirectory().then((rows) => { if (mounted) setAvailableRecipients(rows); }).catch(() => { if (mounted) setError('Unable to load recipients.'); }).finally(() => { if (mounted) setDirectoryLoading(false); }); return () => { mounted = false; }; }, []);
 
   // Default suggested recipient
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
@@ -59,15 +39,21 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
 
   // Check template requirements for Sender Signature
   const template = report.templateSnapshot || templates.find((t) => t.id === report.templateId);
-  const components: any[] = [];
-  const collect = (value: any) => { if (!value) return; if (Array.isArray(value)) { value.forEach(collect); return; } if (typeof value !== 'object') return; if (value.type || value.field_type || value.field_key || value.key) components.push(value); ['components','fields','dynamicSections','sections','rows','children','columns','layout'].forEach((key) => collect(value[key])); };
-  collect(template);
-  const uniqueComponents = Array.from(new Map(components.map((c: any, i) => [businessFieldKey(c) || `component-${i}`, c])).values());
-  const receiverFields = uniqueComponents.filter((c: any) => fieldType(c) === 'signature' && signatureRole(c) === 'receiver').map((c: any) => ({ key: businessFieldKey(c), label: c.signatureConfig?.label || c.configuration?.signatureConfig?.label || c.label || businessFieldKey(c), required: requiredField(c) })).filter((f: any) => f.key);
+  const signatureFields = resolveEffectiveReportSignatureFields(template, report.signatureConfigurations ?? []);
+  const receiverFields = signatureFields.filter((field) => field.signerContext === 'receiver').map((field) => {
+    const configuredRequiredRole = field.requiredRoleKey ?? '';
+    const requiredRole = resolveCanonicalRecipientRoleKey(configuredRequiredRole, availableRecipients);
+    const roleNameMatch = availableRecipients.find((recipient) => normalizeRoleKey(recipient.roleKey) === requiredRole);
+    return {
+      key: field.fieldKey,
+      label: field.label,
+      required: field.required,
+      requiredRole,
+      requiredRoleName: roleNameMatch?.roleName || field.requiredRoleKey || '',
+    };
+  });
 
-  const hasSenderSigRequirement = components.some(
-    (c: any) => fieldType(c) === 'signature' && signatureRole(c) === 'sender'
-  );
+  const hasSenderSigRequirement = signatureFields.some((field) => field.signerContext === 'sender');
   const activeSenderSig = (report.activeSignatures || []).find((s: any) => s.signatureRole === 'sender');
   const mappedRecipientIds = new Set(Object.entries(signatureMappings).filter(([, key]) => key).map(([id]) => id));
   const viewOnlyRecipients = selectedRecipientIds.filter((id) => !mappedRecipientIds.has(id));
@@ -77,7 +63,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
     try {
       await sendReport(report.id, selectedRecipientIds, senderNote.trim(), Object.entries(signatureMappings).filter(([, key]) => key).map(([recipientUserId, signatureFieldKey]) => ({ recipientUserId, signatureFieldKey })));
       onClose();
-    } catch (err: any) { setError(err.message || 'Unable to send report.'); }
+    } catch (err: any) { setError(normalizeError(err, 'send').message); }
     finally { setIsSubmitting(false); }
   };
 
@@ -223,9 +209,33 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
               {selectedRecipientIds.length > 0 && receiverFields.length > 0 && (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs font-bold text-slate-800">Signature Assignments</p>
-                  {selectedRecipientIds.map((recipientId) => {
-                    const usedByOther = new Set(Object.entries(signatureMappings).filter(([id, key]) => id !== recipientId && key).map(([, key]) => key));
-                    return <div key={recipientId} className="flex items-center gap-2"><span className="text-[11px] text-slate-600 min-w-0 flex-1">{availableRecipients.find((u) => u.id === recipientId)?.name || recipientId}</span><select value={signatureMappings[recipientId] || ''} onChange={(e) => { setSignatureMappings((m) => ({ ...m, [recipientId]: e.target.value })); setError(''); }} className="flex-1 px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"><option value="">No signature required</option>{receiverFields.map((field: any) => <option key={field.key} value={field.key} disabled={usedByOther.has(field.key) && signatureMappings[recipientId] !== field.key}>{field.label}</option>)}</select></div>;
+                  {receiverFields.map((field: any) => {
+                    const assignedRecipientId = Object.entries(signatureMappings).find(([, key]) => key === field.key)?.[0] ?? '';
+                    const eligibleRecipients = selectedRecipientIds
+                      .map((id) => availableRecipients.find((recipient) => recipient.id === id))
+                      .filter((recipient) => {
+                        if (!recipient) return false;
+                        const requiredRole = normalizeRoleKey(field.requiredRole);
+                        return !requiredRole || normalizeRoleKey(recipient.roleKey) === requiredRole;
+                      });
+                    return <div key={field.key} className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5">
+                      <div className="text-[11px] font-semibold text-slate-800">{field.label}</div>
+                      <div className="text-[10px] text-slate-500">Required Role: {field.requiredRoleName || 'No role restriction defined by template'}</div>
+                      <select value={assignedRecipientId} onChange={(e) => {
+                        const nextId = e.target.value;
+                        setSignatureMappings((previous) => {
+                          const next = { ...previous };
+                          Object.keys(next).forEach((recipientId) => { if (next[recipientId] === field.key) delete next[recipientId]; });
+                          if (nextId) next[nextId] = field.key;
+                          return next;
+                        });
+                        setError('');
+                      }} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                        <option value="">Select eligible recipient</option>
+                        {eligibleRecipients.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.name} — {recipient.role}</option>)}
+                      </select>
+                      {eligibleRecipients.length === 0 && <p className="text-[10px] text-amber-700">Select a recipient with the required role to assign this field.</p>}
+                    </div>;
                   })}
                   {selectedRecipientIds.length > receiverFields.length && <p className="text-[11px] text-slate-500">More recipients than receiver signature fields is allowed; some recipients may not need to sign.</p>}
                 </div>

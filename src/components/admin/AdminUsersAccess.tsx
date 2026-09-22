@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Edit3, KeyRound, ShieldPlus, UserPlus, Users, X, XCircle } from 'lucide-react';
 import { adminService } from '../../features/admin/services/adminService';
 import type { EmploymentStatus, OrganizationalRole, User } from '../../types';
 import { AdminInfoTooltip } from './AdminInfoTooltip';
 import { normalizeError } from '../../lib/errors/errorHandling';
+import { matchesSearch } from '../../features/search/searchMatcher';
 
 type UserEditor = { name: string; email: string; department: string; roleId: string; status: EmploymentStatus };
 
@@ -31,6 +32,7 @@ export const AdminUsersAccess: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchUsers = async () => {
     try {
@@ -52,6 +54,10 @@ export const AdminUsersAccess: React.FC = () => {
   useEffect(() => {
     void fetchUsers();
   }, []);
+
+  const filteredUsers = useMemo(() => users.filter((user) => matchesSearch(searchTerm, [
+    user.name, user.email, user.profileCode, user.role, user.department, user.status,
+  ])), [users, searchTerm]);
 
   const openEditor = (user: User) => {
     if (user.roleKey === 'admin' && user.roleType === 'System' && user.roleProtected) return;
@@ -165,6 +171,9 @@ export const AdminUsersAccess: React.FC = () => {
         <div className="p-12 text-center text-xs text-slate-400">Loading user directory...</div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="border-b border-slate-100 p-4">
+            <input type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search users by name, email, or profile code…" aria-label="Search users" className="w-full max-w-sm rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:border-purple-500 focus:outline-none" />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
@@ -187,7 +196,7 @@ export const AdminUsersAccess: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users.map((user) => {
+                {filteredUsers.map((user) => {
                   const status = user.status || 'Active';
                   const isAdmin = user.roleKey === 'admin' && user.roleType === 'System' && user.roleProtected;
                   return (

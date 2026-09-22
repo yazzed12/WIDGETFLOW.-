@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Bell,
@@ -10,8 +10,13 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  Search,
 } from 'lucide-react';
 import type { Notification } from '../types';
+import { matchesSearch } from '../features/search/searchMatcher';
+import { DateSearchFilter } from '../features/search/components/DateSearchFilter';
+import { matchesDateRange } from '../features/search/dateRangeFilter';
+import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
 
 type NotificationTab = 'All' | 'Unread' | 'Templates' | 'Reports' | 'Comments';
 
@@ -29,34 +34,21 @@ export const NotificationsPage: React.FC = () => {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<NotificationTab>('All');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState<DateSearchFilterValue | null>(null);
 
   // Filter notifications for active user
   const userNotifications = notifications.filter((n) => n.userId === currentUser.id);
 
-  const filteredNotifications = userNotifications.filter((n) => {
-    switch (activeTab) {
-      case 'Unread':
-        return !n.read;
-      case 'Templates':
-        return (
-          n.type === 'approval_required' ||
-          n.type === 'template_approved' ||
-          n.type === 'template_rejected'
-        );
-      case 'Reports':
-        return (
-          n.type === 'report_received' ||
-          n.type === 'report_returned' ||
-          n.type === 'report_signed' ||
-          n.type === 'report_rejected'
-        );
-      case 'Comments':
-        return n.type === 'comment_added';
-      case 'All':
-      default:
-        return true;
-    }
-  });
+  const filteredNotifications = useMemo(() => userNotifications.filter((n) => {
+    const type = String(n.type).toLowerCase();
+    const matchesTab = activeTab === 'All'
+      || (activeTab === 'Unread' && !n.read)
+      || (activeTab === 'Templates' && (type.includes('template') || type === 'approval_required'))
+      || (activeTab === 'Reports' && type.includes('report'))
+      || (activeTab === 'Comments' && type === 'comment_added');
+    return matchesTab && matchesDateRange(n.timestamp, dateFilter) && matchesSearch(searchTerm, [n.title, n.message, n.type]);
+  }), [userNotifications, activeTab, searchTerm, dateFilter]);
 
   // Timeline Grouping
   const groupNotificationsByDate = (notifs: Notification[]) => {
@@ -87,7 +79,10 @@ export const NotificationsPage: React.FC = () => {
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
       case 'approval_required':
+      case 'template_review_requested':
         return <Clock className="w-4 h-4 text-amber-600" />;
+      case 'template_returned':
+        return <RotateCcw className="w-4 h-4 text-amber-600" />;
       case 'template_approved':
         return <CheckCircle2 className="w-4 h-4 text-emerald-600" />;
       case 'template_rejected':
@@ -114,11 +109,15 @@ export const NotificationsPage: React.FC = () => {
       if (targetTemplate) {
         if (targetTemplate.status === 'Approved') {
           openTemplateDetail(targetTemplate);
-        } else if (targetTemplate.requestedApprovalFromUserId === currentUser.id) {
+        } else if (notif.type === 'approval_required' || notif.type === 'template_review_requested') {
           setActiveView('approvals');
         } else {
           setActiveView('my-requests');
         }
+      } else if (notif.type === 'approval_required' || notif.type === 'template_review_requested') {
+        setActiveView('approvals');
+      } else {
+        setActiveView('my-requests');
       }
     } else if (notif.relatedReportId) {
       const targetReport = reports.find((r) => r.id === notif.relatedReportId);
@@ -193,8 +192,8 @@ export const NotificationsPage: React.FC = () => {
         {tabs.map((tab) => {
           const count = userNotifications.filter((n) => {
             if (tab === 'Unread') return !n.read;
-            if (tab === 'Templates') return n.type.includes('template') || n.type === 'approval_required';
-            if (tab === 'Reports') return n.type.includes('report');
+            if (tab === 'Templates') return String(n.type).toLowerCase().includes('template') || n.type === 'approval_required';
+            if (tab === 'Reports') return String(n.type).toLowerCase().includes('report');
             if (tab === 'Comments') return n.type === 'comment_added';
             return true;
           }).length;
@@ -221,6 +220,14 @@ export const NotificationsPage: React.FC = () => {
             </button>
           );
         })}
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search notifications by title, message, or type…" aria-label="Search notifications" className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none" />
+        </div>
+        <DateSearchFilter value={dateFilter} onChange={setDateFilter} />
       </div>
 
       {/* Notifications List Grouped by Timeline */}

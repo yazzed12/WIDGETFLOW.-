@@ -5,6 +5,7 @@ import type { AdminPack, Category } from '../../types';
 import { AdminInfoTooltip } from './AdminInfoTooltip';
 import { TemplateBuilder } from '../template-builder/TemplateBuilder';
 import type { builderTemplateToAdminPackPayload } from '../template-builder/adminPackCanvas';
+import { matchesSearch } from '../../features/search/searchMatcher';
 
 export const AdminPackManagement: React.FC = () => {
   const [packs, setPacks] = useState<AdminPack[]>([]);
@@ -37,8 +38,7 @@ export const AdminPackManagement: React.FC = () => {
 
   const filteredPacks = packs.filter((pack) => {
     const matchesStatus = statusFilter === 'All' || pack.status === statusFilter;
-    const query = searchTerm.toLowerCase();
-    return matchesStatus && (pack.name.toLowerCase().includes(query) || (pack.categoryName || '').toLowerCase().includes(query));
+    return matchesStatus && matchesSearch(searchTerm, [pack.name, pack.categoryName, pack.description]);
   });
 
   type PackPayload = ReturnType<typeof builderTemplateToAdminPackPayload>;

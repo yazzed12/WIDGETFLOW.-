@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { matchesSearch } from '../features/search/searchMatcher';
+import { DateSearchFilter } from '../features/search/components/DateSearchFilter';
+import { matchesDateRange } from '../features/search/dateRangeFilter';
+import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
+import { formatDateTime } from '../shared/dateTime';
 import { StatusBadge } from '../components/common/StatusBadge';
 import {
   FileSpreadsheet,
@@ -35,6 +40,7 @@ export const ReportsPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabType>('My Reports');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState<DateSearchFilterValue | null>(null);
 
   // Tab Filtering Logic
   const getTabReports = (tab: TabType) => {
@@ -66,15 +72,10 @@ export const ReportsPage: React.FC = () => {
 
   const currentTabReports = getTabReports(activeTab);
 
-  const filteredReports = currentTabReports.filter((r) => {
-    return (
-      !searchTerm ||
-      r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.templateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.createdByName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (r.sentToName && r.sentToName.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-  });
+  const filteredReports = useMemo(() => currentTabReports.filter((r) => matchesDateRange(r.createdAt, dateFilter) && matchesSearch(searchTerm, [
+    r.displayId, r.title, r.templateName, r.createdByName, r.sentToName,
+    r.categoryName, r.status, r.returnReason, r.rejectionReason,
+  ])), [currentTabReports, searchTerm, dateFilter]);
 
   const tabs: TabType[] = ['My Reports', 'Received', 'Draft', 'Awaiting Signature', 'Signed', 'Rejected'];
 
@@ -123,15 +124,18 @@ export const ReportsPage: React.FC = () => {
         </div>
 
         {/* Search Input */}
+        <div className="flex w-full md:w-auto items-center gap-2">
         <div className="relative w-full md:w-64">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search reports..."
+            placeholder="Search reports by name or Report ID…"
             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
           />
+        </div>
+        <DateSearchFilter value={dateFilter} onChange={setDateFilter} />
         </div>
       </div>
 
@@ -194,7 +198,7 @@ export const ReportsPage: React.FC = () => {
                       </>
                     )}
                     <span>•</span>
-                    <span>Created: {new Date(rep.createdAt).toLocaleDateString()}</span>
+                    <span>Created: {formatDateTime(rep.createdAt)}</span>
                   </div>
 
                   {/* Return reason snippet if returned */}

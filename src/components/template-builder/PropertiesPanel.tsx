@@ -6,6 +6,7 @@ import { TableColumnModal } from './TableColumnModal';
 import { TableAggregateModal } from './TableAggregateModal';
 import { RichParagraphEditor } from './RichParagraphEditor.js';
 import { SAFE_FONT_FAMILIES } from '../../shared/themeResolver';
+import { configurationService } from '../../features/configuration/services/configurationService';
 
 interface PropertiesPanelProps {
   builderMode?: 'template' | 'admin-pack';
@@ -38,6 +39,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [newColName, setNewColName] = useState('');
   const [editingColModal, setEditingColModal] = useState<{ column: TableColumnConfig; index: number } | null>(null);
   const [editingAggregateModal, setEditingAggregateModal] = useState<{ aggregate: TableAggregateConfig; index: number } | null>(null);
+  const [signatureRoles, setSignatureRoles] = useState<Array<{ key: string; name: string }>>([]);
+
+  React.useEffect(() => {
+    if (builderMode !== 'template') return;
+    void configurationService.signatureRoleDirectory().then((rows) => {
+      setSignatureRoles(rows.map((row) => ({ key: row.key, name: row.name })));
+    }).catch(() => setSignatureRoles([]));
+  }, [builderMode]);
 
   // 1. Template Settings View (When no component is selected)
   if (!selectedComponent) {
@@ -1881,12 +1890,59 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 </button>
               </div>
 
-              {!selectedComponent.signatureConfig?.signatureRole && (
+            {!selectedComponent.signatureConfig?.signatureRole && (
                 <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] font-bold text-rose-700 flex items-start gap-1.5 mt-1">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
                   <span>Choose whether this signature belongs to the report Sender or Receiver.</span>
                 </div>
               )}
+            </div>
+
+            {/* Assignment standard (stored with the immutable template snapshot). */}
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Required Role</label>
+                <select
+                  value={selectedComponent.signatureConfig?.requiredRole || ''}
+                  onChange={(e) => onUpdateComponent({
+                    ...selectedComponent,
+                    signatureConfig: { ...selectedComponent.signatureConfig, requiredRole: e.target.value.trim() || undefined },
+                  })}
+                  disabled={!isDraft}
+                  className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-500"
+                >
+                  <option value="">No role restriction defined by template</option>
+                  {selectedComponent.signatureConfig?.requiredRole && !signatureRoles.some((role) => role.key === selectedComponent.signatureConfig?.requiredRole) && (
+                    <option value={selectedComponent.signatureConfig.requiredRole}>Existing role: {selectedComponent.signatureConfig.requiredRole}</option>
+                  )}
+                  {signatureRoles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">Stored as the canonical active role key; the field label remains display-only.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Assignment Policy</label>
+                <select
+                  value={selectedComponent.signatureConfig?.assignmentPolicy || 'fixed'}
+                  onChange={(e) => onUpdateComponent({
+                    ...selectedComponent,
+                    signatureConfig: { ...selectedComponent.signatureConfig, assignmentPolicy: e.target.value as any },
+                  })}
+                  disabled={!isDraft}
+                  className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-500"
+                >
+                  <option value="fixed">Fixed by Template</option>
+                  <option value="default_override_allowed">Default — Report Creator Can Override</option>
+                  <option value="report_creator_required">Report Creator Must Configure</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {selectedComponent.signatureConfig?.assignmentPolicy === 'report_creator_required'
+                    ? 'The report creator must configure this field before completing the report.'
+                    : selectedComponent.signatureConfig?.assignmentPolicy === 'default_override_allowed'
+                      ? 'This configuration is used by default and may be changed for an individual report.'
+                      : 'This assignment cannot be changed when creating a report.'}
+                </p>
+              </div>
             </div>
 
             {/* Custom Label */}

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Edit3, Pin, Plus, Search, StickyNote as StickyIcon, Trash2, X } from 'lucide-react';
 import { stickyNotesService } from '../features/sticky-notes/stickyNotesService';
 import type { StickyNote, StickyNoteColor, StickyNoteInput } from '../features/sticky-notes/stickyNotesTypes';
+import { matchesSearch } from '../features/search/searchMatcher';
 
 const colors: StickyNoteColor[] = ['yellow', 'blue', 'green', 'rose', 'purple'];
 const colorClass: Record<StickyNoteColor, string> = { yellow: 'bg-amber-50 border-amber-200', blue: 'bg-blue-50 border-blue-200', green: 'bg-emerald-50 border-emerald-200', rose: 'bg-rose-50 border-rose-200', purple: 'bg-purple-50 border-purple-200' };
@@ -10,7 +11,7 @@ export const StickyNotesPage: React.FC = () => {
   const [notes, setNotes] = useState<StickyNote[]>([]); const [query, setQuery] = useState(''); const [editing, setEditing] = useState<StickyNote | null>(null); const [editorOpen, setEditorOpen] = useState(false); const [saving, setSaving] = useState(false);
   const refresh = async () => { try { setNotes(await stickyNotesService.list()); } catch { setNotes([]); } };
   useEffect(() => { void refresh(); }, []);
-  const filtered = useMemo(() => notes.filter((note) => `${note.title} ${note.content}`.toLowerCase().includes(query.toLowerCase())), [notes, query]);
+  const filtered = useMemo(() => notes.filter((note) => matchesSearch(query, [note.title, note.content])), [notes, query]);
   const save = async (input: StickyNoteInput) => { if (!input.content.trim()) return; setSaving(true); try { const note = editing ? await stickyNotesService.update(editing.id, input) : await stickyNotesService.create(input); setNotes((prev) => editing ? prev.map((n) => n.id === note.id ? note : n) : [note, ...prev]); setEditing(null); setEditorOpen(false); } finally { setSaving(false); } };
   const remove = async (id: string) => { await stickyNotesService.remove(id); setNotes((prev) => prev.filter((note) => note.id !== id)); };
   const togglePin = async (note: StickyNote) => { const updated = await stickyNotesService.update(note.id, { title: note.title, content: note.content, colorKey: note.colorKey, isPinned: !note.isPinned }); setNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n)); };

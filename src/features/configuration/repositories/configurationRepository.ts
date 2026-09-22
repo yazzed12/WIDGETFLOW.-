@@ -32,6 +32,21 @@ async function rpc(name: string, args: Record<string, unknown> = {}): Promise<un
 }
 
 export const configurationRepository = {
+  async signatureRoleDirectory(): Promise<Array<{ key: string; name: string; roleType?: string }>> {
+    const { data, error } = await getSupabaseBrowserClient().rpc('list_signature_role_directory');
+    const rows = requireData(data as Row[] | null, error) as Row[];
+    return rows.map((row) => ({ key: String(row.role_key ?? row.key), name: String(row.role_name ?? row.name), roleType: row.role_type }));
+  },
+
+  async activeRoles(): Promise<Row[]> {
+    const { data, error } = await getSupabaseBrowserClient()
+      .from('roles')
+      .select('id,key,name,is_active,is_protected')
+      .eq('is_active', true)
+      .order('name');
+    return requireData(data, error) as Row[];
+  },
+
   async effectiveConfig(): Promise<SystemEffectiveConfig> {
     const { data, error } = await getSupabaseBrowserClient().rpc('current_effective_system_config');
     return requireData(data as SystemEffectiveConfig | null, error);

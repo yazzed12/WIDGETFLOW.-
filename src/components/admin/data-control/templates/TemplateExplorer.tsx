@@ -9,6 +9,7 @@ import type { WidgetTemplate, Category } from '../../../../types';
 import { StatusPill } from '../common/StatusPill';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate, resolveCategoryName, resolveUserName } from '../common/entityResolvers';
+import { matchesSearch } from '../../../../features/search/searchMatcher';
 
 interface TemplateExplorerProps {
   templates: WidgetTemplate[];
@@ -33,11 +34,10 @@ export const TemplateExplorer: React.FC<TemplateExplorerProps> = ({
 
   const filteredTemplates = useMemo(() => {
     return templates.filter((template) => {
-      const name = (template.name || '').toLowerCase();
-      const desc = (template.description || '').toLowerCase();
-      const term = searchTerm.toLowerCase().trim();
-
-      const matchesSearch = !term || name.includes(term) || desc.includes(term);
+      const searchMatches = matchesSearch(searchTerm, [
+        template.templateDisplayId, template.name, template.description,
+        template.createdByName, resolveCategoryName(template.categoryId, null, categories), template.status,
+      ]);
 
       const status = String(template.status || 'Draft');
       const matchesStatus = statusFilter === 'all' || status.toLowerCase() === statusFilter.toLowerCase();
@@ -45,9 +45,9 @@ export const TemplateExplorer: React.FC<TemplateExplorerProps> = ({
       const catId = String(template.categoryId || '');
       const matchesCategory = categoryFilter === 'all' || catId === categoryFilter;
 
-      return matchesSearch && matchesStatus && matchesCategory;
+      return searchMatches && matchesStatus && matchesCategory;
     });
-  }, [templates, searchTerm, statusFilter, categoryFilter]);
+  }, [templates, categories, searchTerm, statusFilter, categoryFilter]);
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
@@ -76,7 +76,7 @@ export const TemplateExplorer: React.FC<TemplateExplorerProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search templates by title, description, or keyword…"
+            placeholder="Search templates by name or Template ID…"
             className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-purple-500"
           />
         </div>

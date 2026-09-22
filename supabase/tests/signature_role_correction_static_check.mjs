@@ -1,0 +1,31 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+
+const migration = fs.readFileSync(new URL('../migrations/087_signature_role_directory_and_effective_role_hardening.sql', import.meta.url), 'utf8');
+const verify = fs.readFileSync(new URL('../migrations/087_signature_role_directory_and_effective_role_hardening_verify.sql', import.meta.url), 'utf8');
+const fill = fs.readFileSync(new URL('../../src/components/reports/FillReportModal.tsx', import.meta.url), 'utf8');
+const send = fs.readFileSync(new URL('../../src/components/reports/SendReportModal.tsx', import.meta.url), 'utf8');
+const panel = fs.readFileSync(new URL('../../src/components/template-builder/PropertiesPanel.tsx', import.meta.url), 'utf8');
+const repo = fs.readFileSync(new URL('../../src/features/configuration/repositories/configurationRepository.ts', import.meta.url), 'utf8');
+
+assert.match(migration, /list_signature_role_directory/);
+assert.match(migration, /private\.current_user_has_permission\('reports\.edit_draft'\)/);
+assert.match(migration, /private\.current_user_has_permission\('templates\.create'\)/);
+assert.match(migration, /r\.is_active/);
+assert.doesNotMatch(migration, /create\s+policy[\s\S]*public\.roles/i);
+assert.match(migration, /report_signature_configurations/);
+assert.match(migration, /configuration_found/);
+assert.match(migration, /report_effective_signature_configuration/);
+assert.match(migration, /private\.complete_report_085_legacy/);
+assert.doesNotMatch(migration, /recipient_user_id/);
+assert.match(verify, /role_directory_hardened/);
+assert.match(repo, /list_signature_role_directory/);
+assert.match(fill, /signatureRoleDirectory/);
+assert.match(fill, /Use Template (?:Default|Settings)/);
+assert.match(fill, /report_creator_required/);
+assert.match(panel, /signatureRoleDirectory/);
+assert.doesNotMatch(panel, /type="text"[\s\S]{0,220}requiredRole/);
+assert.match(send, /Signature Assignments/);
+assert.match(send, /eligibleRecipients/);
+assert.match(send, /recipient\.roleKey/);
+console.log('signature_role_correction_static_check: PASS');

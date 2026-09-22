@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ApproveConfirmModal } from '../components/approvals/ApproveConfirmModal';
 import { RejectModal } from '../components/approvals/RejectModal';
@@ -16,8 +16,10 @@ import {
   Inbox,
   UserCheck,
   RotateCcw,
+  Search,
 } from 'lucide-react';
 import type { WidgetTemplate } from '../types';
+import { matchesSearch } from '../features/search/searchMatcher';
 
 export const ApprovalsPage: React.FC = () => {
   const {
@@ -38,10 +40,21 @@ export const ApprovalsPage: React.FC = () => {
   const [confirmApproveTemplate, setConfirmApproveTemplate] = useState<WidgetTemplate | null>(null);
   const [rejectTargetTemplate, setRejectTargetTemplate] = useState<WidgetTemplate | null>(null);
   const [returnTargetTemplate, setReturnTargetTemplate] = useState<WidgetTemplate | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const getCategoryName = (catId: string) => {
     return categories.find((c) => c.id === catId)?.name || 'General';
   };
+
+  const filteredApprovals = useMemo(() => pendingApprovals.filter((req) => matchesSearch(searchTerm, [
+    req.templateDisplayId,
+    req.name,
+    req.createdByName,
+    req.createdByRole,
+    req.requestedApprovalFromName,
+    req.status,
+    categories.find((category) => category.id === req.categoryId)?.name || 'General',
+  ])), [pendingApprovals, searchTerm, categories]);
 
   const getCategoryIcon = (catId: string) => {
     switch (catId) {
@@ -124,6 +137,14 @@ export const ApprovalsPage: React.FC = () => {
 
       {/* Main Inbox Container */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        {hasPermission('template_approvals.view') && (
+          <div className="border-b border-slate-100 p-4">
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input type="text" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search approvals by template, creator, or Template ID…" aria-label="Search approvals" className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+        )}
         {!hasPermission('template_approvals.view') ? (
           /* Employee Empty/Access State */
           <div className="p-12 text-center text-slate-500 text-xs space-y-3">
@@ -145,7 +166,7 @@ export const ApprovalsPage: React.FC = () => {
         ) : (
           /* Pending Requests Inbox Cards */
           <div className="divide-y divide-slate-100">
-            {pendingApprovals.map((req) => {
+            {filteredApprovals.map((req) => {
               const isUnclaimedQueueItem = !req.requestedApprovalFromUserId;
               const canReviewThisTemplate =
                 req.status === 'Pending Approval' &&

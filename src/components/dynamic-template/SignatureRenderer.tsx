@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShieldCheck, CheckCircle2, FileSignature, Clock } from 'lucide-react';
-import type { TemplateComponent, ReportSignatureRecord, User, TemplateTheme } from '../../types';
-import { resolveReportSignatureForComponent } from '../../shared/signatureResolver.js';
+import type { TemplateComponent, ReportSignatureRecord, ReportSignatureAssignment, ReportAssignment, ReportSignatureConfiguration, User, TemplateTheme } from '../../types';
+import { getReportBusinessFieldKey, resolveReportAssignmentForComponent, resolveReportSignatureForComponent } from '../../shared/signatureResolver.js';
 import { resolveSignatureShellStyle } from '../../shared/themeResolver.js';
 import { getSignatureFontFamily } from '../signature/SignatureEditor';
 import { signatureService } from '../../features/signature/signatureService';
@@ -14,6 +14,10 @@ interface SignatureRendererProps {
   activeSignature?: ReportSignatureRecord | null;
   activeSignatures?: ReportSignatureRecord[];
   signatureHistory?: ReportSignatureRecord[];
+  signatureAssignments?: ReportSignatureAssignment[];
+  assignments?: ReportAssignment[];
+  signatureConfigurations?: ReportSignatureConfiguration[];
+  /** Compatibility prop for callers; signer identity comes from workflow records only. */
   currentUser?: User;
   theme?: TemplateTheme;
   value?: any;
@@ -58,7 +62,9 @@ export const SignatureRenderer: React.FC<SignatureRendererProps> = ({
   activeSignature,
   activeSignatures,
   signatureHistory,
-  currentUser,
+  signatureAssignments,
+  assignments,
+  signatureConfigurations,
   theme,
   value,
   reportId,
@@ -68,8 +74,17 @@ export const SignatureRenderer: React.FC<SignatureRendererProps> = ({
   const rawRole = sigConfig.signatureRole || (component as any).signatureRole || 'Sender';
   const canonicalRole = String(rawRole).toLowerCase() === 'sender' ? 'sender' : 'receiver';
   const roleDisplayLabel = canonicalRole === 'sender' ? 'Sender' : 'Receiver';
+  const effectiveConfiguration = signatureConfigurations?.find((configuration) => configuration.signatureFieldKey === getReportBusinessFieldKey(component));
+  const effectiveRoleContext = effectiveConfiguration?.signatureRole === 'sender' ? 'sender' : effectiveConfiguration?.signatureRole === 'receiver' ? 'receiver' : canonicalRole;
+  const requiredRole = typeof effectiveConfiguration?.requiredRoleKey === 'string' && effectiveConfiguration.requiredRoleKey.trim()
+    ? effectiveConfiguration.requiredRoleKey.trim()
+    : typeof sigConfig.requiredRole === 'string' && sigConfig.requiredRole.trim()
+      ? sigConfig.requiredRole.trim()
+    : null;
+  const assignmentPolicy = sigConfig.assignmentPolicy;
 
   const label =
+    effectiveConfiguration?.displayLabelOverride ||
     sigConfig.label ||
     (component as any).label ||
     (canonicalRole === 'sender' ? 'Prepared & Submitted By' : 'Reviewed & Approved By');
@@ -85,7 +100,9 @@ export const SignatureRenderer: React.FC<SignatureRendererProps> = ({
     activeSignatures,
     signatureHistory,
     activeSignature,
+    signatureAssignments,
   });
+  const relevantAssignment = resolveReportAssignmentForComponent({ component, signatureAssignments, assignments });
   const persisted = normalizePersistedSignature(value);
   const hasPersisted = !!(persisted && (persisted.signatureMethod || persisted.typedName || persisted.drawingData || persisted.signatureAssetId));
   const persistedName = persisted?.typedName || value?.signedByName || value?.signerName;
@@ -106,7 +123,7 @@ export const SignatureRenderer: React.FC<SignatureRendererProps> = ({
   if (readOnly || relevantSignature || hasPersisted) {
     if (relevantSignature || hasPersisted) {
       const displaySignature: any = hasPersisted ? { ...(relevantSignature || {}), signatureMethod: persisted.signatureMethod || 'typed', signatureDataUrl: persistedImage || resolvedUploadedUrl, drawingData: persisted.drawingData, typedFontKey: persisted.typedFontKey, typedName: persistedName, signedByName: persistedName || relevantSignature?.signedByName || 'Signed user', signedByRole: relevantSignature?.signedByRole || roleDisplayLabel, verificationId: relevantSignature?.verificationId || persisted.signatureAssetId || 'Persisted signature' } : { ...(relevantSignature || {}), signatureDataUrl: resolvedUploadedUrl || relevantSignature?.signatureDataUrl };
-      const isSender = String(displaySignature.signatureRole || canonicalRole).toLowerCase() === 'sender';
+      const isSender = String(displaySignature.signatureRole || effectiveRoleContext).toLowerCase() === 'sender';
       const formattedDate = displaySignature.signedAt
         ? new Date(displaySignature.signedAt).toLocaleString('en-GB', {
             day: '2-digit',
@@ -218,10 +235,17 @@ export const SignatureRenderer: React.FC<SignatureRendererProps> = ({
 
       <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-1">
         <p className="text-xs text-slate-700 font-medium">
-          {currentUser ? `Signer: ${currentUser.name} (${currentUser.role})` : 'Signer: Authorized User'}
+          {relevantAssignment
+            ? `Assigned signer: ${relevantAssignment.recipientName || 'Assigned recipient'}${relevantAssignment.recipientRoleName ? ` · ${relevantAssignment.recipientRoleName}` : ''}`
+            : `Required signer: ${roleDisplayLabel}${requiredRole ? ` · ${requiredRole}` : ''}`}
+        </p>
+        <p className="text-[11px] text-slate-500">
+          {assignmentPolicy === 'report_creator_required'
+            ? 'The report creator must configure this assignment before submission.'
+            : 'The report workflow resolves the assigned signer before signing.'}
         </p>
         <p className="text-[11px] text-slate-500 italic">
-          Your saved signature will be requested with explicit confirmation when submitting or reviewing.
+          The actual signer and signature are shown only after an authorized workflow action.
         </p>
       </div>
     </div>

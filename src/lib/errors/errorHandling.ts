@@ -1,16 +1,43 @@
-export type AppErrorCode = 'INVALID_EMAIL' | 'INVALID_PASSWORD' | 'INVALID_INPUT' | 'EMAIL_ALREADY_EXISTS' | 'FILE_TYPE_NOT_SUPPORTED' | 'FILE_TOO_LARGE' | 'UNAUTHORIZED' | 'SESSION_EXPIRED' | 'FORBIDDEN' | 'NOT_FOUND' | 'NETWORK_ERROR' | 'INTERNAL_ERROR' | 'UNKNOWN';
+export type AppErrorCode = 'INVALID_EMAIL' | 'INVALID_PASSWORD' | 'INVALID_INPUT' | 'EMAIL_ALREADY_EXISTS' | 'FILE_TYPE_NOT_SUPPORTED' | 'FILE_TOO_LARGE' | 'UNAUTHORIZED' | 'SESSION_EXPIRED' | 'FORBIDDEN' | 'NOT_FOUND' | 'NETWORK_ERROR' | 'INTERNAL_ERROR' | 'SIGNATURE_CONFIGURATION_REQUIRED' | 'SIGNATURE_CONFIGURATION_FIXED' | 'SIGNATURE_REQUIRED_ROLE_NOT_FOUND' | 'SIGNATURE_REQUIRED_ROLE_INVALID' | 'SIGNATURE_REQUIRED_ROLE_MISMATCH' | 'SIGNATURE_FIELD_NOT_FOUND' | 'SIGNATURE_ROLE_IMMUTABLE' | 'REPORT_SIGNATURE_CONFIGURATION_NOT_EDITABLE' | 'UNKNOWN';
 
 export class AppError extends Error {
   readonly code: AppErrorCode;
   readonly field?: string;
-  constructor(code: AppErrorCode, message: string, field?: string) { super(message); this.name = 'AppError'; this.code = code; this.field = field; }
+  readonly fieldKey?: string;
+  readonly context?: 'send' | 'sign' | 'complete';
+  constructor(code: AppErrorCode, message: string, field?: string, fieldKey?: string, context?: 'send' | 'sign' | 'complete') {
+    super(message);
+    this.name = 'AppError';
+    this.code = code;
+    this.field = field;
+    this.fieldKey = fieldKey;
+    this.context = context;
+  }
 }
 
-export function normalizeError(error: unknown): AppError {
-  const source = error as { code?: unknown; message?: unknown } | null;
+export function normalizeError(error: unknown, context?: 'send' | 'sign' | 'complete'): AppError {
+  if (error instanceof AppError) {
+    // Normalization is intentionally idempotent. Context layers may rethrow a
+    // domain error, but must not discard its field association or safe copy.
+    if (!context || error.context === context) return error;
+    return new AppError(error.code, error.message, error.field, error.fieldKey, context);
+  }
+  const source = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown } | null;
   const code = String(source?.code ?? '').toUpperCase();
-  const message = String(source?.message ?? '');
+  const message = [source?.message, source?.details, source?.hint].filter(Boolean).map(String).join(' | ');
   const lower = message.toLowerCase();
+  const signatureMatch = (pattern: RegExp) => message.match(pattern)?.[1] || undefined;
+  const embeddedSignature = signatureMatch(/(?:^|\|\s*)(SIGNATURE_[A-Z_]+|REPORT_SIGNATURE_CONFIGURATION_NOT_EDITABLE)(?::([^|\s]+))?/i)?.toUpperCase() || '';
+  const signatureCode = code.startsWith('SIGNATURE_') || code === 'REPORT_SIGNATURE_CONFIGURATION_NOT_EDITABLE' ? code : embeddedSignature;
+  const signatureFieldKey = signatureMatch(/(?:SIGNATURE_CONFIGURATION_REQUIRED|SIGNATURE_REQUIRED_ROLE_INVALID|SIGNATURE_REQUIRED_ROLE_MISMATCH|SIGNATURE_FIELD_NOT_FOUND):([^|\s]+)/i);
+  if (signatureCode === 'SIGNATURE_CONFIGURATION_REQUIRED' || lower.includes('signature_configuration_required')) return new AppError('SIGNATURE_CONFIGURATION_REQUIRED', 'Please configure this signature field before completing the report.', undefined, signatureFieldKey, context);
+  if (signatureCode === 'SIGNATURE_CONFIGURATION_FIXED' || lower.includes('signature_configuration_fixed')) return new AppError('SIGNATURE_CONFIGURATION_FIXED', 'This signature configuration is fixed by the template and cannot be changed.', undefined, signatureFieldKey, context);
+  if (signatureCode === 'SIGNATURE_REQUIRED_ROLE_NOT_FOUND' || lower.includes('signature_required_role_not_found')) return new AppError('SIGNATURE_REQUIRED_ROLE_NOT_FOUND', 'The selected signer role is no longer available. Please choose another role.', undefined, signatureFieldKey, context);
+  if (signatureCode === 'SIGNATURE_REQUIRED_ROLE_INVALID' || lower.includes('signature_required_role_invalid')) return new AppError('SIGNATURE_REQUIRED_ROLE_INVALID', 'The configured signer role is no longer valid. Please update this signature field.', undefined, signatureFieldKey, context);
+  if (signatureCode === 'SIGNATURE_REQUIRED_ROLE_MISMATCH' || lower.includes('signature_required_role_mismatch')) return new AppError('SIGNATURE_REQUIRED_ROLE_MISMATCH', context === 'sign' ? 'You are not assigned to the required role for this signature.' : 'The selected recipient does not have the required role for this signature.', undefined, signatureFieldKey, context);
+  if (signatureCode === 'SIGNATURE_FIELD_NOT_FOUND' || lower.includes('signature_field_not_found')) return new AppError('SIGNATURE_FIELD_NOT_FOUND', 'This signature field is no longer available. Refresh the report and try again.', undefined, signatureFieldKey, context);
+  if (signatureCode === 'SIGNATURE_ROLE_IMMUTABLE' || lower.includes('signature_role_immutable')) return new AppError('SIGNATURE_ROLE_IMMUTABLE', 'The signer type is defined by the template and cannot be changed for this report.', undefined, signatureFieldKey, context);
+  if (signatureCode === 'REPORT_SIGNATURE_CONFIGURATION_NOT_EDITABLE' || lower.includes('report_signature_configuration_not_editable')) return new AppError('REPORT_SIGNATURE_CONFIGURATION_NOT_EDITABLE', 'Signature assignments cannot be changed after this report is sent.', undefined, signatureFieldKey, context);
   if (code === 'EMAIL_ALREADY_EXISTS' || lower.includes('already exists') || lower.includes('already uses') || lower.includes('duplicate')) return new AppError('EMAIL_ALREADY_EXISTS', 'An account with this email address already exists.', 'email');
   if (code === 'INVALID_EMAIL' || lower.includes('email is invalid') || lower.includes('invalid email')) return new AppError('INVALID_EMAIL', 'Please enter a valid email address.', 'email');
   if (code === 'INVALID_PASSWORD' || lower.includes('password must be between')) return new AppError('INVALID_PASSWORD', 'Password must be between 12 and 128 characters.', 'password');

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { WidgetTemplate, DynamicTemplate, ReportTemplateField, TemplateComponent, TemplateSection } from '../../types';
+import type { WidgetTemplate, DynamicTemplate, ReportTemplateField, TemplateComponent, TemplateSection, ReportSignatureAssignment, ReportAssignment, ReportSignatureConfiguration } from '../../types';
 import { TemplateComponentRenderer } from './TemplateComponentRenderer';
 import { Layers } from 'lucide-react';
 import { getReportBusinessFieldKey } from '../../shared/signatureResolver';
@@ -13,6 +13,9 @@ interface DynamicTemplateRendererProps {
   activeSignature?: any;
   activeSignatures?: any[];
   signatureHistory?: any[];
+  signatureAssignments?: ReportSignatureAssignment[];
+  assignments?: ReportAssignment[];
+  signatureConfigurations?: ReportSignatureConfiguration[];
   currentUser?: any;
   reportId?: string;
   ensureReportId?: () => Promise<string>;
@@ -27,6 +30,9 @@ export const DynamicTemplateRenderer: React.FC<DynamicTemplateRendererProps> = (
   activeSignature,
   activeSignatures,
   signatureHistory,
+  signatureAssignments,
+  assignments,
+  signatureConfigurations,
   currentUser,
   reportId,
   ensureReportId,
@@ -132,6 +138,9 @@ export const DynamicTemplateRenderer: React.FC<DynamicTemplateRendererProps> = (
                   activeSignature={activeSignature}
                   activeSignatures={activeSignatures}
                   signatureHistory={signatureHistory}
+                  signatureAssignments={signatureAssignments}
+                  assignments={assignments}
+                  signatureConfigurations={signatureConfigurations}
                   currentUser={currentUser}
                   reportId={reportId}
                   ensureReportId={ensureReportId}

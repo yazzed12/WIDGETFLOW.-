@@ -18,6 +18,7 @@ import { UserSignatureSettingsModal } from '../user/UserSignatureSettingsModal';
 import { useAuth } from '../../features/auth/useAuth';
 import { toAuthError } from '../../features/auth/authErrors';
 import { navigateTo } from '../../features/auth/authRouting';
+import { matchesSearch } from '../../features/search/searchMatcher';
 
 export const Navbar: React.FC = () => {
   const { logout } = useAuth();
@@ -62,20 +63,15 @@ export const Navbar: React.FC = () => {
   );
 
   const matchingTemplates = searchTerm.trim()
-    ? approvedTemplates.filter(
-        (t) =>
-          t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          t.tags.some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-      ).slice(0, 3)
+    ? approvedTemplates.filter((t) => matchesSearch(searchTerm, [
+        t.templateDisplayId, t.name, t.description, t.createdByName, ...t.tags,
+      ])).slice(0, 3)
     : [];
 
   const matchingReports = searchTerm.trim()
-    ? userAccessibleReports.filter(
-        (r) =>
-          r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          r.templateName.toLowerCase().includes(searchTerm.toLowerCase())
-      ).slice(0, 3)
+    ? userAccessibleReports.filter((r) => matchesSearch(searchTerm, [
+        r.displayId, r.title, r.templateName, r.createdByName, r.sentToName, r.status,
+      ])).slice(0, 3)
     : [];
 
   const hasSearchResults = matchingTemplates.length > 0 || matchingReports.length > 0;
@@ -152,7 +148,7 @@ export const Navbar: React.FC = () => {
             onFocus={() => {
               if (searchTerm.trim()) setShowSearchResults(true);
             }}
-            placeholder="Global search templates & reports..."
+            placeholder="Search templates & reports by name or Display ID…"
             className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
           />
           {searchTerm && (

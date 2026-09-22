@@ -90,6 +90,20 @@ export function mapReportRow(row: any): ReportInstance {
     signatureFieldLabelSnapshot: m.signature_field_label_snapshot,
   }));
 
+  const signatureConfigurations = (
+    row.report_signature_configurations ?? []
+  ).map((c: any) => ({
+    id: c.id,
+    reportId: c.report_id,
+    signatureFieldKey: c.signature_field_key,
+    signatureRole: String(c.signature_role ?? '').toLowerCase() as 'sender' | 'receiver',
+    requiredRoleKey: c.required_role_key ?? null,
+    displayLabelOverride: c.display_label_override ?? null,
+    assignmentPolicy: c.assignment_policy,
+    isOverride: c.is_override,
+    inherited: false,
+  }));
+
   return {
     id: row.id,
     displayId: row.report_display_id ?? undefined,
@@ -108,6 +122,7 @@ export function mapReportRow(row: any): ReportInstance {
     sentToName: firstAssignment?.recipientName,
     assignments,
     signatureAssignments,
+    signatureConfigurations,
     currentSendCycleId: row.current_send_cycle_id,
     lockedAt: row.locked_at,
     sentAt: row.sent_at,
@@ -144,29 +159,54 @@ export function mapReportRow(row: any): ReportInstance {
   };
 }
 
+export function normalizeRoleKey(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+export function normalizeRecipientDirectoryRow(r: any) {
+  const fullName = r.full_name ?? r.fullName ?? r.name ?? '';
+  const roleName = r.role_name ?? r.roleName ?? r.role ?? '';
+  const roleKey = r.role_key ?? r.roleKey ?? '';
+  const id = r.user_id ?? r.userId ?? r.id;
+  return {
+    userId: id,
+    fullName,
+    id,
+    name: fullName,
+    email: r.email,
+    roleId: r.role_id ?? r.roleId,
+    roleKey,
+    roleName,
+    role: roleName,
+    governanceLevel: r.governance_level ?? r.governanceLevel,
+    department: r.department ?? '',
+    profileCode: r.profile_code ?? r.profileCode ?? '',
+    avatarInitials: String(fullName)
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((x: string) => x[0])
+      .join('')
+      .toUpperCase(),
+    avatarBg: 'bg-slate-600',
+    status: 'Active',
+  };
+}
+
+/** Resolve a template/report role value to the canonical role key exposed by the directory. */
+export function resolveCanonicalRecipientRoleKey(requiredRole: unknown, recipients: any[]): string {
+  const normalizedRequiredRole = normalizeRoleKey(requiredRole);
+  if (!normalizedRequiredRole) return '';
+  const match = recipients.find((recipient) => (
+    normalizeRoleKey(recipient.roleKey) === normalizedRequiredRole
+    || normalizeRoleKey(recipient.roleName ?? recipient.role) === normalizedRequiredRole
+    || normalizeRoleKey(recipient.roleId) === normalizedRequiredRole
+  ));
+  return normalizeRoleKey(match?.roleKey ?? requiredRole);
+}
+
 export const reportService = {
   async listRecipientDirectory() {
-    return (await reportRepository.listRecipientDirectory()).map(
-      (r: any) => ({
-        id: r.user_id,
-        name: r.full_name,
-        email: r.email,
-        roleId: r.role_id,
-        roleKey: r.role_key,
-        role: r.role_name,
-        governanceLevel: r.governance_level,
-        department: r.department ?? '',
-        profileCode: r.profile_code ?? '',
-        avatarInitials: String(r.full_name ?? '')
-          .split(/\s+/)
-          .slice(0, 2)
-          .map((x: string) => x[0])
-          .join('')
-          .toUpperCase(),
-        avatarBg: 'bg-slate-600',
-        status: 'Active',
-      })
-    );
+    return (await reportRepository.listRecipientDirectory()).map(normalizeRecipientDirectoryRow);
   },
 
   async list() {
@@ -260,6 +300,20 @@ export const reportService = {
       assignmentId,
       payload
     );
+  },
+
+  async setSignatureConfiguration(
+    reportId: string,
+    signatureFieldKey: string,
+    signatureRole: 'sender' | 'receiver',
+    requiredRole?: string | null,
+    displayLabel?: string | null,
+  ) {
+    return reportRepository.setSignatureConfiguration(reportId, signatureFieldKey, signatureRole, requiredRole, displayLabel);
+  },
+
+  async resetSignatureConfiguration(reportId: string, signatureFieldKey: string) {
+    return reportRepository.resetSignatureConfiguration(reportId, signatureFieldKey);
   },
 
   async listNotifications(

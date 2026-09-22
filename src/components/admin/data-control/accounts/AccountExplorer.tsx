@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { StatusPill } from '../common/StatusPill';
 import { EmptyState } from '../common/EmptyState';
+import { matchesSearch } from '../../../../features/search/searchMatcher';
 
 export interface AccountRecord {
   id: string;
@@ -56,12 +57,10 @@ export const AccountExplorer: React.FC<AccountExplorerProps> = ({
 
   const filteredAccounts = useMemo(() => {
     return accounts.filter((account) => {
-      const name = (account.full_name || account.name || '').toLowerCase();
-      const email = (account.email || '').toLowerCase();
-      const code = (account.profile_code || '').toLowerCase();
-      const term = searchTerm.toLowerCase().trim();
-
-      const matchesSearch = !term || name.includes(term) || email.includes(term) || code.includes(term);
+      const searchMatches = matchesSearch(searchTerm, [
+        account.full_name, account.name, account.email, account.profile_code,
+        account.role_name, account.role, account.role_key, account.department, account.status,
+      ]);
 
       const role = String(account.role_name || account.role || account.role_key || '');
       const matchesRole = roleFilter === 'all' || role === roleFilter;
@@ -69,7 +68,7 @@ export const AccountExplorer: React.FC<AccountExplorerProps> = ({
       const status = String(account.status || 'Unavailable');
       const matchesStatus = statusFilter === 'all' || status.toLowerCase() === statusFilter.toLowerCase();
 
-      return matchesSearch && matchesRole && matchesStatus;
+      return searchMatches && matchesRole && matchesStatus;
     });
   }, [accounts, searchTerm, roleFilter, statusFilter]);
 

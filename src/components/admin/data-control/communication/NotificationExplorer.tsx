@@ -4,6 +4,7 @@ import { formatDate, resolveUserName } from '../common/entityResolvers';
 import { ReviewChangesDialog } from '../common/ReviewChangesDialog';
 import { adminDataControlService } from '../../../../features/admin/services/adminDataControlService';
 import { useApp } from '../../../../context/AppContext';
+import { matchesSearch } from '../../../../features/search/searchMatcher';
 
 export interface NotificationRecord {
   id: string;
@@ -45,12 +46,9 @@ export const NotificationExplorer: React.FC<NotificationExplorerProps> = ({
   const [selectedNotif, setSelectedNotif] = useState<NotificationRecord | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const filtered = notifications.filter((n) => {
-    const term = searchTerm.toLowerCase().trim();
-    const title = (n.title || '').toLowerCase();
-    const msg = (n.message || '').toLowerCase();
-    return !term || title.includes(term) || msg.includes(term);
-  });
+  const filtered = notifications.filter((n) => matchesSearch(searchTerm, [
+    n.title, n.message, n.notification_type, n.type,
+  ]));
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) =>

@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   HelpCircle,
 } from 'lucide-react';
+import { matchesSearch } from '../../features/search/searchMatcher';
 
 const CONTENT_TYPES: Array<ContentLibraryItem['contentType']> = [
   'Heading',
@@ -144,12 +145,9 @@ export const AdminContentLibraryManagement: React.FC = () => {
       (statusFilter === 'Disabled' && !item.enabled);
     const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
     const matchesType = selectedType === 'All' || item.contentType === selectedType;
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.contentValue.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchMatches = matchesSearch(searchTerm, [item.name, item.description, item.contentValue, item.category, item.contentType]);
 
-    return matchesStatus && matchesCat && matchesType && matchesSearch;
+    return matchesStatus && matchesCat && matchesType && searchMatches;
   });
 
   return (

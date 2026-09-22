@@ -314,6 +314,8 @@ export interface ReportSignatureRecord {
   reportId: string;
   componentId?: string;
   componentKey?: string;
+  reportAssignmentId?: string;
+  sendCycleId?: string;
   signedByUserId: string;
   signedByName: string;
   signedByRole: string;
@@ -330,6 +332,9 @@ export interface ReportSignatureRecord {
 
 export interface SignatureConfig {
   signatureRole?: 'Sender' | 'Receiver';
+  /** Optional template-level assignment metadata. A person is never stored here. */
+  requiredRole?: string;
+  assignmentPolicy?: 'fixed' | 'default_override_allowed' | 'report_creator_required';
   label?: string;
   showName?: boolean;
   showRole?: boolean;
@@ -657,6 +662,7 @@ export interface ReportInstance {
   sentToName?: string;
   assignments?: ReportAssignment[];
   signatureAssignments?: ReportSignatureAssignment[];
+  signatureConfigurations?: ReportSignatureConfiguration[];
   currentSendCycleId?: string;
   lockedAt?: string;
   sentAt?: string;
@@ -676,6 +682,18 @@ export interface ReportInstance {
   templateSnapshot?: any;
   auditHistory?: ReportAuditRecord[];
   workflowDetails?: any;
+}
+
+export interface ReportSignatureConfiguration {
+  id?: string;
+  reportId: string;
+  signatureFieldKey: string;
+  signatureRole: 'sender' | 'receiver';
+  requiredRoleKey?: string | null;
+  displayLabelOverride?: string | null;
+  assignmentPolicy: 'fixed' | 'default_override_allowed' | 'report_creator_required';
+  isOverride?: boolean;
+  inherited?: boolean;
 }
 
 export interface ReportSignatureAssignment {
@@ -752,7 +770,7 @@ export interface Notification {
   userId: string;
   title: string;
   message: string;
-  type: "approval_required" | "template_approved" | "template_rejected" | "comment_added" | "report_received" | "report_returned" | "report_signed" | "report_fully_signed" | "report_rejected";
+  type: "approval_required" | "template_review_requested" | "template_returned" | "template_approved" | "template_rejected" | "comment_added" | "report_received" | "report_returned" | "report_signed" | "report_fully_signed" | "report_rejected";
   read: boolean;
   timestamp: string;
   readAt?: string;

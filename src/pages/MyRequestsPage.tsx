@@ -12,6 +12,10 @@ import {
   Eye,
 } from 'lucide-react';
 import type { TemplateStatus } from '../types';
+import { matchesSearch } from '../features/search/searchMatcher';
+import { DateSearchFilter } from '../features/search/components/DateSearchFilter';
+import { matchesDateRange } from '../features/search/dateRangeFilter';
+import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
 
 export const MyRequestsPage: React.FC = () => {
   const {
@@ -24,16 +28,16 @@ export const MyRequestsPage: React.FC = () => {
 
   const [statusFilter, setStatusFilter] = useState<'All' | TemplateStatus>('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState<DateSearchFilterValue | null>(null);
 
   const requests = getMyRequestsForUser();
 
   const filteredRequests = requests.filter((req) => {
     const matchesStatus = statusFilter === 'All' || req.status === statusFilter;
-    const matchesSearch =
-      !searchTerm ||
-      req.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.description.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesStatus && matchesSearch;
+    const matchesQuery = matchesSearch(searchTerm, [req.templateDisplayId, req.name, req.description,
+      req.status, categories.find((category) => category.id === req.categoryId)?.name,
+      req.requestedApprovalFromName, req.returnReason, req.rejectionReason]);
+    return matchesStatus && matchesDateRange(req.createdAt, dateFilter) && matchesQuery;
   });
 
   const getCategoryName = (catId: string) => {
@@ -112,10 +116,11 @@ export const MyRequestsPage: React.FC = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search my requests..."
+            placeholder="Search requests by template or Template ID…"
             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
           />
         </div>
+        <DateSearchFilter value={dateFilter} onChange={setDateFilter} />
       </div>
 
       {/* Requests List Container */}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShieldCheck, X, Check, FileSignature } from 'lucide-react';
 import type { User, UserSignatureProfile } from '../../types';
 import { apiService } from '../../services/apiService';
+import { normalizeError } from '../../lib/errors/errorHandling';
 
 interface ReportSignatureModalProps {
   reportTitle: string;
@@ -93,7 +94,7 @@ export const ReportSignatureModal: React.FC<ReportSignatureModalProps> = ({
 
       onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to apply signature to report.');
+      setErrorMsg(normalizeError(err, 'sign').message);
       setIsSigning(false);
     }
   };

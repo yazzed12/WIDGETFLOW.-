@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { configurationService } from '../../features/configuration/services/configurationService';
 import type { AdminPack } from '../../types';
 import { Package, Search, Plus, Eye, AlertTriangle, X } from 'lucide-react';
+import { matchesSearch } from '../../features/search/searchMatcher';
 
 interface PacksPanelProps {
   onInsertAdminPack: (pack: AdminPack) => void;
@@ -39,11 +40,7 @@ export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => 
 
   const filteredStandardPacks = standardPacks.filter((pack) => {
     const matchesCat = selectedCategory === 'All' || (pack.categoryName || 'General') === selectedCategory;
-    const matchesSearch =
-      pack.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      pack.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (pack.categoryName || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCat && matchesSearch;
+    return matchesCat && matchesSearch(searchTerm, [pack.name, pack.description, pack.categoryName]);
   });
 
   return (

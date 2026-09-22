@@ -9,6 +9,7 @@ import {
   FileText,
   AlertTriangle,
 } from 'lucide-react';
+import { matchesSearch } from '../../features/search/searchMatcher';
 
 interface ContentLibraryPanelProps {
   onInsertContentItem?: (item: ContentLibraryItem) => void;
@@ -56,15 +57,7 @@ export const ContentLibraryPanel: React.FC<ContentLibraryPanelProps> = ({
 
   const filteredItems = items.filter((item) => {
     const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      !q ||
-      item.name.toLowerCase().includes(q) ||
-      item.contentType.toLowerCase().includes(q) ||
-      item.contentValue.toLowerCase().includes(q) ||
-      (item.category || '').toLowerCase().includes(q);
-
-    return matchesCat && matchesSearch;
+    return matchesCat && matchesSearch(searchQuery, [item.name, item.contentType, item.contentValue, item.category]);
   });
 
   return (

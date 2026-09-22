@@ -17,12 +17,12 @@ export const reportRepository = {
   },
   async list() {
     const c = getSupabaseBrowserClient();
-    const { data, error } = await c.from('reports').select('*, report_values(*), report_assignments(*), report_signature_events(*), report_signature_assignments(*), template_versions(id,schema_snapshot)').order('updated_at', { ascending: false });
+    const { data, error } = await c.from('reports').select('*, report_values(*), report_assignments(*), report_signature_events(*), report_signature_assignments(*), report_signature_configurations(*), template_versions(id,schema_snapshot)').order('updated_at', { ascending: false });
     return required(data, error) as any[];
   },
   async get(id: string) {
     const c = getSupabaseBrowserClient();
-    const result = await c.from('reports').select('*, report_values(*), report_assignments(*), report_signature_events(*), report_signature_assignments(*), report_audit_events(*), template_versions(id,schema_snapshot)').eq('id', id).maybeSingle();
+    const result = await c.from('reports').select('*, report_values(*), report_assignments(*), report_signature_events(*), report_signature_assignments(*), report_signature_configurations(*), report_audit_events(*), template_versions(id,schema_snapshot)').eq('id', id).maybeSingle();
     const { data, error } = result;
     return required(data, error) as any;
   },
@@ -53,6 +53,23 @@ export const reportRepository = {
   async signReport(reportId: string, assignmentId: string, payload: any = {}) {
     const { data, error } = await getSupabaseBrowserClient().rpc('sign_report', { p_report_id: reportId, p_assignment_id: assignmentId, p_payload: payload });
     return unwrap(required(data, error));
+  },
+  async setSignatureConfiguration(reportId: string, signatureFieldKey: string, signatureRole: 'sender' | 'receiver', requiredRole?: string | null, displayLabel?: string | null) {
+    const { data, error } = await getSupabaseBrowserClient().rpc('set_report_signature_configuration', {
+      p_report_id: reportId,
+      p_signature_field_key: signatureFieldKey,
+      p_signature_role: signatureRole,
+      p_required_role: requiredRole?.trim() || null,
+      p_display_label: displayLabel?.trim() || null,
+    });
+    return required(data, error) as any;
+  },
+  async resetSignatureConfiguration(reportId: string, signatureFieldKey: string) {
+    const { data, error } = await getSupabaseBrowserClient().rpc('reset_report_signature_configuration', {
+      p_report_id: reportId,
+      p_signature_field_key: signatureFieldKey,
+    });
+    return required(data, error) as any;
   },
   async listNotifications(userId: string) {
     const { data, error } = await getSupabaseBrowserClient().from('notifications').select('*').eq('recipient_user_id', userId).order('created_at', { ascending: false });

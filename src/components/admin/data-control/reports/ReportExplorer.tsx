@@ -9,6 +9,7 @@ import type { ReportInstance, WidgetTemplate } from '../../../../types';
 import { StatusPill } from '../common/StatusPill';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate, resolveTemplateName, resolveUserName } from '../common/entityResolvers';
+import { matchesSearch } from '../../../../features/search/searchMatcher';
 
 interface ReportExplorerProps {
   reports: ReportInstance[];
@@ -37,10 +38,10 @@ export const ReportExplorer: React.FC<ReportExplorerProps> = ({
 
   const filteredReports = useMemo(() => {
     return reports.filter((report) => {
-      const title = (report.title || '').toLowerCase();
-      const term = searchTerm.toLowerCase().trim();
-
-      const matchesSearch = !term || title.includes(term);
+      const searchMatches = matchesSearch(searchTerm, [
+        report.displayId, report.title, report.templateName, report.createdByName,
+        report.sentToName, report.categoryName, report.status,
+      ]);
 
       const status = String(report.status || 'Draft');
       const matchesStatus = statusFilter === 'all' || status.toLowerCase() === statusFilter.toLowerCase();
@@ -48,7 +49,7 @@ export const ReportExplorer: React.FC<ReportExplorerProps> = ({
       const tplId = String(report.templateId || '');
       const matchesTemplate = templateFilter === 'all' || tplId === templateFilter;
 
-      return matchesSearch && matchesStatus && matchesTemplate;
+      return searchMatches && matchesStatus && matchesTemplate;
     });
   }, [reports, searchTerm, statusFilter, templateFilter]);
 
@@ -79,7 +80,7 @@ export const ReportExplorer: React.FC<ReportExplorerProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); onPageChange?.(1); }}
-            placeholder="Search reports by title or keyword…"
+            placeholder="Search reports by name or Report ID…"
             className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-purple-500"
           />
         </div>

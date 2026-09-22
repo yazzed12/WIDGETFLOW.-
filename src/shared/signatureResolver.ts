@@ -1,18 +1,23 @@
 import type {
   TemplateComponent,
   ReportSignatureRecord,
+  ReportSignatureAssignment,
+  ReportAssignment,
 } from '../types/index.js';
+import type { ReportSignatureConfiguration } from '../types/index.js';
 
 export function resolveReportSignatureForComponent({
   component,
   activeSignatures = [],
   signatureHistory = [],
   activeSignature = null,
+  signatureAssignments = [],
 }: {
   component: TemplateComponent;
   activeSignatures?: ReportSignatureRecord[];
   signatureHistory?: ReportSignatureRecord[];
   activeSignature?: ReportSignatureRecord | null;
+  signatureAssignments?: ReportSignatureAssignment[];
 }): ReportSignatureRecord | null {
   if (activeSignature) return activeSignature;
 
@@ -34,25 +39,51 @@ export function resolveReportSignatureForComponent({
 
   if (match) return match;
 
-  match = activeSignatures.find(
+  // Migration 039's immutable mapping is the canonical field-to-recipient
+  // relationship. Use it when signature events do not carry component keys.
+  if (signatureAssignments.length > 0) {
+    const fieldKey = getReportBusinessFieldKey(component);
+    const mappedAssignmentIds = new Set(
+      signatureAssignments
+        .filter((mapping) => fieldKey !== null && mapping.signatureFieldKey === fieldKey)
+        .map((mapping) => mapping.reportAssignmentId)
+    );
+    const mappedMatches = activeSignatures.filter(
+      (s) => s.isActive !== false && s.reportAssignmentId && mappedAssignmentIds.has(s.reportAssignmentId)
+    );
+    if (mappedMatches.length === 1) return mappedMatches[0];
+  }
+
+  // A role-only fallback is safe only when the report has exactly one
+  // active signature for that role.  With multiple receiver assignments,
+  // selecting the first record would display one recipient's signer in
+  // another recipient's field.
+  const activeRoleMatches = activeSignatures.filter(
     (s) =>
       s.isActive !== false &&
       String(s.signatureRole).toLowerCase() === canonicalRole
   );
 
-  if (match) return match;
+  if (activeRoleMatches.length === 1) return activeRoleMatches[0];
 
-  match = signatureHistory.find(
+  const historicalExactMatch = signatureHistory.find(
     (s) =>
       s.isActive !== false &&
       (
         (Boolean(s.componentId) && s.componentId === component.id) ||
-        (Boolean(s.componentKey) && s.componentKey === component.key) ||
-        String(s.signatureRole).toLowerCase() === canonicalRole
+        (Boolean(s.componentKey) && s.componentKey === component.key)
       )
   );
 
-  return match || null;
+  if (historicalExactMatch) return historicalExactMatch;
+
+  const historicalRoleMatches = signatureHistory.filter(
+    (s) =>
+      s.isActive !== false &&
+      String(s.signatureRole).toLowerCase() === canonicalRole
+  );
+
+  return historicalRoleMatches.length === 1 ? historicalRoleMatches[0] : null;
 }
 
 /**
@@ -62,8 +93,8 @@ export function resolveReportSignatureForComponent({
  */
 export function getReportBusinessFieldKey(component: any): string | null {
   const candidates = [
-    component?.key,
     component?.field_key,
+    component?.key,
     component?.fieldKey,
   ];
 
@@ -77,6 +108,160 @@ export function getReportBusinessFieldKey(component: any): string | null {
   }
 
   return null;
+}
+
+export interface ReportSignatureFieldDefinition {
+  fieldKey: string;
+  label: string;
+  signatureRole: 'sender' | 'receiver';
+  required: boolean;
+  assignmentPolicy: 'fixed' | 'default_override_allowed' | 'report_creator_required';
+  defaultRequiredRoleKey: string | null;
+}
+
+export interface EffectiveReportSignatureFieldDefinition extends ReportSignatureFieldDefinition {
+  displayLabel: string;
+  signerContext: 'sender' | 'receiver';
+  requiredRoleKey: string | null;
+  source: 'template' | 'report-override';
+}
+
+export function normalizeSignatureRoleKey(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+export function isSignatureConfigurationComplete(
+  field: EffectiveReportSignatureFieldDefinition,
+  configuration: ReportSignatureConfigurationDraftLike | undefined,
+  activeRoleKeys: Iterable<string>,
+): boolean {
+  const configured = configuration?.configured === true;
+  const displayLabel = (configured ? configuration?.displayLabel : field.displayLabel || field.label)?.trim() || '';
+  const signerContext = configured ? configuration?.signatureRole : field.signerContext;
+  const requiredRoleKey = normalizeSignatureRoleKey(
+    configured ? configuration?.requiredRoleKey : field.requiredRoleKey,
+  );
+  const activeKeys = new Set(Array.from(activeRoleKeys, normalizeSignatureRoleKey));
+
+  if (!field.fieldKey.trim() || !displayLabel) return false;
+  if (signerContext !== 'sender' && signerContext !== 'receiver') return false;
+  if (field.assignmentPolicy === 'report_creator_required' && !configured) return false;
+  if ((field.assignmentPolicy === 'report_creator_required' || requiredRoleKey) && (!requiredRoleKey || !activeKeys.has(requiredRoleKey))) return false;
+  return true;
+}
+
+export type ReportSignatureConfigurationDraftLike = {
+  configured: boolean;
+  requiredRoleKey: string;
+  displayLabel?: string;
+  signatureRole?: 'sender' | 'receiver';
+};
+
+/** One canonical report signature definition for historical and current snapshots. */
+export function resolveEffectiveReportSignatureFields(
+  template: unknown,
+  configurations: ReportSignatureConfiguration[] = [],
+): EffectiveReportSignatureFieldDefinition[] {
+  return collectReportSignatureFieldDefinitions(template).map((field) => {
+    const override = configurations.find((item) => item.signatureFieldKey === field.fieldKey && item.isOverride !== false);
+    const signerContext = override?.signatureRole === 'sender' ? 'sender' : override?.signatureRole === 'receiver' ? 'receiver' : field.signatureRole;
+    const displayLabel = typeof override?.displayLabelOverride === 'string' && override.displayLabelOverride.trim()
+      ? override.displayLabelOverride.trim()
+      : field.label;
+    return {
+      ...field,
+      label: displayLabel,
+      displayLabel,
+      signerContext,
+      signatureRole: signerContext,
+      requiredRoleKey: override?.requiredRoleKey ?? field.defaultRequiredRoleKey,
+      source: override ? 'report-override' : 'template',
+    };
+  });
+}
+
+export interface ReportSignatureConfigurationDraft extends ReportSignatureConfigurationDraftLike {}
+
+export function serializeReportSignatureConfiguration(
+  field: ReportSignatureFieldDefinition,
+  draft: ReportSignatureConfigurationDraft,
+) {
+  return {
+    signatureFieldKey: field.fieldKey,
+    signatureRole: draft.signatureRole ?? field.signatureRole,
+    requiredRole: draft.configured ? draft.requiredRoleKey.trim() || null : null,
+    displayLabel: draft.configured ? draft.displayLabel?.trim() || null : null,
+    hasExplicitConfiguration: draft.configured,
+  };
+}
+
+/**
+ * Return one canonical definition per signature business field. Template
+ * snapshots can expose the same component through several historical wrapper
+ * collections, so dedupe by field_key/key (never by component.id).
+ */
+export function collectReportSignatureFieldDefinitions(value: any): ReportSignatureFieldDefinition[] {
+  const output: ReportSignatureFieldDefinition[] = [];
+  const seenKeys = new Set<string>();
+  const seenObjects = new WeakSet<object>();
+
+  const visit = (node: any) => {
+    if (!node) return;
+    if (Array.isArray(node)) { node.forEach(visit); return; }
+    if (typeof node !== 'object' || seenObjects.has(node)) return;
+    seenObjects.add(node);
+
+    const wrapperConfiguration = node.configuration;
+    const configuration = node.signatureConfig
+      ?? node.signature_config
+      ?? wrapperConfiguration?.signatureConfig
+      ?? wrapperConfiguration?.signature_config
+      ?? (wrapperConfiguration && typeof wrapperConfiguration === 'object' ? wrapperConfiguration : {});
+    const type = String(node.type ?? node.field_type ?? node.component_type ?? node.configuration?.type ?? node.configuration?.field_type ?? '').toLowerCase();
+    if (type === 'signature') {
+      const fieldKey = String(node.field_key ?? node.key ?? node.fieldKey ?? configuration.field_key ?? configuration.key ?? '').trim();
+      if (fieldKey && !seenKeys.has(fieldKey)) {
+        const rawRole = String(configuration.signatureRole ?? configuration.signature_role ?? node.signatureRole ?? node.signature_role ?? 'receiver').toLowerCase();
+        const rawPolicy = String(configuration.assignmentPolicy ?? configuration.assignment_policy ?? node.assignmentPolicy ?? node.assignment_policy ?? 'fixed').toLowerCase();
+        const assignmentPolicy = rawPolicy === 'default_override_allowed' || rawPolicy === 'report_creator_required'
+          ? rawPolicy
+          : 'fixed';
+        output.push({
+          fieldKey,
+          label: String(configuration.label ?? node.label ?? node.title ?? fieldKey),
+          signatureRole: rawRole === 'sender' ? 'sender' : 'receiver',
+          required: Boolean(node.is_required ?? node.required ?? configuration.required),
+          assignmentPolicy,
+          defaultRequiredRoleKey: String(configuration.requiredRole ?? configuration.required_role_key ?? configuration.required_role ?? node.requiredRole ?? node.required_role_key ?? '').trim() || null,
+        });
+        seenKeys.add(fieldKey);
+      }
+    }
+
+    Object.values(node).forEach(visit);
+  };
+
+  visit(value);
+  return output;
+}
+
+/** Resolve the persisted recipient assignment for a receiver signature field. */
+export function resolveReportAssignmentForComponent({
+  component,
+  signatureAssignments = [],
+  assignments = [],
+}: {
+  component: TemplateComponent;
+  signatureAssignments?: ReportSignatureAssignment[];
+  assignments?: ReportAssignment[];
+}): ReportAssignment | null {
+  const fieldKey = getReportBusinessFieldKey(component);
+  if (!fieldKey) return null;
+  const mapping = signatureAssignments.find(
+    (candidate) => candidate.signatureFieldKey === fieldKey
+  );
+  if (!mapping) return null;
+  return assignments.find((assignment) => assignment.id === mapping.reportAssignmentId) || null;
 }
 
 function normalizeSnapshotField(field: any): any {
@@ -135,6 +320,24 @@ function normalizeSnapshotField(field: any): any {
     field.signature_config !== undefined
   ) {
     normalized.signatureConfig = field.signature_config;
+  }
+
+  // Some historical snapshots stored signature metadata directly inside the
+  // configuration wrapper. Promote only the signature keys so every renderer
+  // consumes one canonical shape without mutating the source snapshot.
+  const wrapper = field.configuration ?? field.config;
+  if (wrapper && typeof wrapper === 'object' && normalized.signatureConfig === undefined && (
+    wrapper.signatureRole !== undefined || wrapper.signature_role !== undefined ||
+    wrapper.requiredRole !== undefined || wrapper.required_role !== undefined ||
+    wrapper.assignmentPolicy !== undefined || wrapper.assignment_policy !== undefined
+  )) {
+    normalized.signatureConfig = {
+      signatureRole: wrapper.signatureRole ?? wrapper.signature_role,
+      requiredRole: wrapper.requiredRole ?? wrapper.required_role ?? wrapper.required_role_key,
+      assignmentPolicy: wrapper.assignmentPolicy ?? wrapper.assignment_policy,
+      label: wrapper.label,
+      required: wrapper.required,
+    };
   }
 
   if (

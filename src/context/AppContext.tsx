@@ -608,8 +608,9 @@ export const AppProvider: React.FC<{
       showToast(`Created report instance "${newReport.title}"`, 'success');
       return newReport;
     } catch (err: any) {
-      showToast(err.message || 'Failed to create report instance', 'warning');
-      throw err;
+      const safe = normalizeError(err);
+      showToast(safe.message, 'warning');
+      throw safe;
     }
   };
 
@@ -631,8 +632,9 @@ export const AppProvider: React.FC<{
         await refreshReports(); closeFillReportModal(); return saved;
       }
     } catch (err: any) {
-      showToast(err.message || 'Failed to update report', 'warning');
-      throw err;
+      const safe = normalizeError(err, markAsCompleted ? 'complete' : undefined);
+      showToast(safe.message, 'warning');
+      throw safe;
     }
   };
 
@@ -645,7 +647,7 @@ export const AppProvider: React.FC<{
       await refreshReports();
       showToast('Report marked completed and ready to send', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Failed to complete report', 'warning');
+      showToast(normalizeError(err, 'complete').message, 'warning');
     }
   };
 
@@ -665,8 +667,9 @@ export const AppProvider: React.FC<{
       showToast(`Report sent to ${updated.sentToName} for review & signature`, 'success');
       closeSendReportModal();
     } catch (err: any) {
-      showToast(err.message || 'Failed to send report', 'warning');
-      throw err;
+      const safe = normalizeError(err, 'send');
+      showToast(safe.message, 'warning');
+      throw safe;
     }
   };
 
@@ -748,8 +751,9 @@ export const AppProvider: React.FC<{
       showToast(`Report signed successfully (${verId})`, 'success');
       closeSignReportModal();
     } catch (err: any) {
-      showToast(err.message || 'Failed to sign report', 'warning');
-      throw err;
+      const safe = normalizeError(err, 'sign');
+      showToast(safe.message, 'warning');
+      throw safe;
     }
   };
 

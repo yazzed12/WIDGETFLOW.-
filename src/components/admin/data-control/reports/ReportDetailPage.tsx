@@ -194,6 +194,8 @@ export const ReportDetailPage: React.FC<ReportDetailPageProps> = ({
                   reportId={report.id}
                   activeSignatures={report.activeSignatures}
                   signatureHistory={report.signatureHistory}
+                  signatureAssignments={report.signatureAssignments}
+                  assignments={report.assignments}
                 />
               </div>
             </div>

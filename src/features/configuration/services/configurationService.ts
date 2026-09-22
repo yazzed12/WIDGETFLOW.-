@@ -23,6 +23,8 @@ async function safe<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 export const configurationService = {
+  signatureRoleDirectory: () => safe(() => configurationRepository.signatureRoleDirectory()),
+  activeRoles: () => safe(() => configurationRepository.activeRoles()),
   effectiveConfig: () => safe(() => configurationRepository.effectiveConfig()),
   features: () => safe(() => configurationRepository.features()),
   elements: () => safe(() => configurationRepository.elements()),

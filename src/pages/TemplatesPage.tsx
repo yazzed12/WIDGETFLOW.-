@@ -17,6 +17,10 @@ import {
   FileText,
 } from 'lucide-react';
 import { getBusinessRevisionLabel } from '../shared/businessRevisionLabel';
+import { matchesSearch } from '../features/search/searchMatcher';
+import { DateSearchFilter } from '../features/search/components/DateSearchFilter';
+import { matchesDateRange } from '../features/search/dateRangeFilter';
+import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
 
 export const TemplatesPage: React.FC = () => {
   const {
@@ -38,9 +42,9 @@ export const TemplatesPage: React.FC = () => {
 
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [dateFilter, setDateFilter] = useState<DateSearchFilterValue | null>(null);
 
   const approvedTemplates = getApprovedTemplates();
-  const normalizedSearch = searchTerm.trim().toLowerCase();
 
   const allTags = Array.from(
     new Set(approvedTemplates.flatMap((t) => t.tags))
@@ -49,14 +53,10 @@ export const TemplatesPage: React.FC = () => {
   const filteredTemplates = approvedTemplates.filter((t) => {
     const matchesCategory = !selectedCategory || t.categoryId === selectedCategory;
     const matchesTag = !selectedTag || t.tags.includes(selectedTag);
-    const matchesSearch =
-      !normalizedSearch ||
-      t.name.toLowerCase().includes(normalizedSearch) ||
-      t.description.toLowerCase().includes(normalizedSearch) ||
-      categories.find((cat) => cat.id === t.categoryId)?.name.toLowerCase().includes(normalizedSearch) ||
-      t.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch));
+    const matchesQuery = matchesDateRange(t.createdAt, dateFilter) && matchesSearch(searchTerm, [t.templateDisplayId, t.name, t.description,
+              categories.find((cat) => cat.id === t.categoryId)?.name, t.createdByName, ...t.tags]);
 
-    return matchesCategory && matchesTag && matchesSearch;
+    return matchesCategory && matchesTag && matchesQuery;
   });
 
   const getCategoryIcon = (catId: string) => {
@@ -107,7 +107,7 @@ export const TemplatesPage: React.FC = () => {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search report templates by title, description, or tags..."
+              placeholder="Search templates by name or Template ID…"
               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
             />
             {searchTerm && (
@@ -119,6 +119,7 @@ export const TemplatesPage: React.FC = () => {
               </button>
             )}
           </div>
+          <DateSearchFilter value={dateFilter} onChange={setDateFilter} />
 
           {/* Category Filter & View Mode */}
           <div className="flex items-center gap-2 overflow-x-auto">

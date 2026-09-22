@@ -1,6 +1,6 @@
 import React from 'react';
 import { getReportBusinessFieldKey } from '../../shared/signatureResolver';
-import type { ReportTemplateField, TemplateComponent, ComponentOption } from '../../types';
+import type { ReportTemplateField, TemplateComponent, ComponentOption, ReportSignatureAssignment, ReportAssignment, ReportSignatureConfiguration } from '../../types';
 import { TableV2Renderer } from './TableV2Renderer';
 import { RatingInputControl } from './RatingInputControl';
 import { AcknowledgementControl } from './AcknowledgementControl';
@@ -39,6 +39,9 @@ interface TemplateComponentRendererProps {
   activeSignature?: any;
   activeSignatures?: any[];
   signatureHistory?: any[];
+  signatureAssignments?: ReportSignatureAssignment[];
+  assignments?: ReportAssignment[];
+  signatureConfigurations?: ReportSignatureConfiguration[];
   currentUser?: any;
   theme?: TemplateTheme;
   reportId?: string;
@@ -118,6 +121,9 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
   activeSignature,
   activeSignatures,
   signatureHistory,
+  signatureAssignments,
+  assignments,
+  signatureConfigurations,
   currentUser,
   theme,
   reportId,
@@ -355,6 +361,9 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
           activeSignature={(component as any).activeSignature || activeSignature}
           activeSignatures={(component as any).activeSignatures || activeSignatures}
           signatureHistory={(component as any).signatureHistory || signatureHistory}
+          signatureAssignments={signatureAssignments}
+          assignments={assignments}
+          signatureConfigurations={signatureConfigurations}
           currentUser={currentUser}
           theme={theme}
           value={value}
