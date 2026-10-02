@@ -532,6 +532,7 @@ export const INITIAL_NOTIFICATIONS: Notification[] = [
 export const INITIAL_REPORTS: ReportInstance[] = [
   {
     id: 'rep-inst-1',
+    sourceType: 'template',
     templateId: 'tpl-hr-1',
     templateName: 'Weekly Operations Report',
     title: 'Ahmed Hassan - Weekly Operations Report - Week 33',
@@ -585,6 +586,7 @@ export const INITIAL_REPORTS: ReportInstance[] = [
   },
   {
     id: 'rep-inst-2',
+    sourceType: 'template',
     templateId: 'tpl-bi-1',
     templateName: 'Executive KPI Report',
     title: 'Sarah Mohamed - Executive KPI Report - August 2026',
@@ -637,6 +639,7 @@ export const INITIAL_REPORTS: ReportInstance[] = [
   },
   {
     id: 'rep-inst-3',
+    sourceType: 'template',
     templateId: 'tpl-hr-3',
     templateName: 'Resource Capacity Report',
     title: 'Ahmed Hassan - Resource Capacity Report - Q3',
@@ -696,6 +699,7 @@ export const INITIAL_REPORTS: ReportInstance[] = [
   },
   {
     id: 'rep-inst-4',
+    sourceType: 'template',
     templateId: 'tpl-dev-2',
     templateName: 'Incident Summary Report',
     title: 'Ahmed Hassan - Incident Summary Report - INC-84920',
@@ -748,6 +752,7 @@ export const INITIAL_REPORTS: ReportInstance[] = [
   },
   {
     id: 'rep-inst-5',
+    sourceType: 'template',
     templateId: 'tpl-fin-3',
     templateName: 'Expense Analysis Report',
     title: 'Ahmed Hassan - Expense Analysis Report - Q3 Draft',

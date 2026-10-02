@@ -1,17 +1,20 @@
 import type { ReportTemplateField, TemplateComponent } from '../../types/index.js';
 
+const ASSET_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export const resolveAssetUrl = (rawUrl?: string, rawAssetId?: string): string => {
   if (rawUrl) {
     if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('/api/assets/')) {
       return rawUrl;
     }
-    if (rawUrl.startsWith('asset-')) {
+    if (rawUrl.startsWith('asset-') || ASSET_UUID_RE.test(rawUrl)) {
       return `/api/assets/${rawUrl}`;
     }
     return rawUrl;
   }
   if (rawAssetId) {
-    return rawAssetId.startsWith('/api/assets/') ? rawAssetId : `/api/assets/${rawAssetId}`;
+    if (rawAssetId.startsWith('/api/assets/')) return rawAssetId;
+    if (rawAssetId.startsWith('asset-') || ASSET_UUID_RE.test(rawAssetId)) return `/api/assets/${rawAssetId}`;
   }
   return '';
 };

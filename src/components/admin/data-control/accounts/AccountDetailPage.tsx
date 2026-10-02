@@ -439,7 +439,7 @@ export const AccountDetailPage: React.FC<AccountDetailPageProps> = ({
                           {rep.title || 'Untitled Report'}
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 font-medium">
-                          {rep.templateName || 'Template'}
+                          {rep.sourceType === 'uploaded' ? 'Uploaded Report' : rep.templateName || 'Template'}
                         </td>
                         <td className="py-3.5 px-4">
                           <StatusPill status={rep.status} size="sm" />

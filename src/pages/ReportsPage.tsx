@@ -5,6 +5,11 @@ import { DateSearchFilter } from '../features/search/components/DateSearchFilter
 import { matchesDateRange } from '../features/search/dateRangeFilter';
 import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
 import { formatDateTime } from '../shared/dateTime';
+import { belongsToOperationalSubject, isOperationalRecipient } from '../features/delegations/operationalWorkspaceFilters';
+import { getOperationalReportAssignment, hasOperationalReportSignatureAssignment } from '../features/delegations/operationalReportAssignment';
+import { canCreateTemplateBackedReport } from '../features/delegations/effectiveAuthority';
+import { getDelegatedSignatureSnapshot } from '../features/reports/signatureProvenance';
+import { UploadedReportModal } from '../components/reports/UploadedReportModal';
 import { StatusBadge } from '../components/common/StatusBadge';
 import {
   FileSpreadsheet,
@@ -18,6 +23,7 @@ import {
   FileCheck,
   Edit3,
   XCircle,
+  UploadCloud,
 } from 'lucide-react';
 
 type TabType = 'My Reports' | 'Received' | 'Draft' | 'Awaiting Signature' | 'Signed' | 'Rejected';
@@ -25,7 +31,10 @@ type TabType = 'My Reports' | 'Received' | 'Draft' | 'Awaiting Signature' | 'Sig
 export const ReportsPage: React.FC = () => {
   const {
     reports,
-    currentUser,
+    reportEditLoadingId,
+    authorityContext,
+    operationalSubjectUserId,
+    isDelegatedMode,
     templates,
     setActiveView,
     openReportViewModal,
@@ -36,33 +45,39 @@ export const ReportsPage: React.FC = () => {
     openFillReportModal,
     markReportCompleted,
     hasPermission,
+    hasOperationalPermission,
   } = useApp();
+  const canStartReportCreation = hasOperationalPermission('reports.create');
+  const subjectId = operationalSubjectUserId ?? '';
 
   const [activeTab, setActiveTab] = useState<TabType>('My Reports');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<DateSearchFilterValue | null>(null);
+  const [showCreateChoices, setShowCreateChoices] = useState(false);
+  const [showUploadedModal, setShowUploadedModal] = useState(false);
+  const [reportForDocumentUpload, setReportForDocumentUpload] = useState<import('../types').ReportInstance | null>(null);
 
   // Tab Filtering Logic
   const getTabReports = (tab: TabType) => {
     switch (tab) {
       case 'My Reports':
-        return reports.filter((r) => r.createdById === currentUser.id);
+        return reports.filter((r) => belongsToOperationalSubject(r, subjectId));
       case 'Received':
-        return reports.filter((r) => r.assignments?.some((a) => a.recipientUserId === currentUser.id) || r.sentToId === currentUser.id);
+        return reports.filter((r) => isOperationalRecipient(r, subjectId));
       case 'Draft':
-        return reports.filter((r) => r.createdById === currentUser.id && r.status === 'Draft');
+        return reports.filter((r) => belongsToOperationalSubject(r, subjectId) && r.status === 'Draft');
       case 'Awaiting Signature':
-        return reports.filter((r) => (r.assignments?.some((a) => a.recipientUserId === currentUser.id) || r.sentToId === currentUser.id) && r.status === 'Sent');
+        return reports.filter((r) => r.sourceType === 'template' && isOperationalRecipient(r, subjectId) && r.status === 'Sent');
       case 'Signed':
         return reports.filter(
           (r) =>
-            (r.createdById === currentUser.id || r.assignments?.some((a) => a.recipientUserId === currentUser.id) || r.sentToId === currentUser.id || hasPermission('reports.view_organization')) &&
+            (belongsToOperationalSubject(r, subjectId) || isOperationalRecipient(r, subjectId) || hasOperationalPermission('reports.view_organization')) &&
             r.status === 'Signed'
         );
       case 'Rejected':
         return reports.filter(
           (r) =>
-            (r.createdById === currentUser.id || r.assignments?.some((a) => a.recipientUserId === currentUser.id) || r.sentToId === currentUser.id || hasPermission('reports.view_organization')) &&
+            (belongsToOperationalSubject(r, subjectId) || isOperationalRecipient(r, subjectId) || hasOperationalPermission('reports.view_organization')) &&
             r.status === 'Rejected'
         );
       default:
@@ -86,13 +101,22 @@ export const ReportsPage: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <FileSpreadsheet className="w-6 h-6 text-indigo-600" />
-            Reports Distribution & Signatures
+            Reports
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Track, complete, send for review, and digitally sign generated reports.
+            Create and distribute WidgetFlow reports and uploaded documents.
           </p>
         </div>
+        {canStartReportCreation && <div className="relative">
+          <button type="button" onClick={() => setShowCreateChoices((value) => !value)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700"><FileSpreadsheet className="h-4 w-4" />Create Report</button>
+          {showCreateChoices && <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+            {canCreateTemplateBackedReport(hasOperationalPermission) ? <button type="button" onClick={() => { setShowCreateChoices(false); setActiveView('templates'); }} className="block w-full rounded-lg p-3 text-left hover:bg-slate-50"><span className="block text-xs font-bold text-slate-800">Create from Template</span><span className="mt-1 block text-[11px] text-slate-500">Use an approved WidgetFlow template.</span></button> : <p role="status" className="rounded-lg px-3 py-2 text-[11px] text-slate-500">Approved-template access is required to start a report from a template.</p>}
+            {!isDelegatedMode && hasPermission('reports.create') && <button type="button" onClick={() => { setShowCreateChoices(false); setReportForDocumentUpload(null); setShowUploadedModal(true); }} className="block w-full rounded-lg p-3 text-left hover:bg-slate-50"><span className="block text-xs font-bold text-slate-800">Upload Existing Report</span><span className="mt-1 block text-[11px] text-slate-500">Upload a document you created and distribute it securely.</span></button>}
+          </div>}
+        </div>}
       </div>
+
+      {isDelegatedMode && authorityContext && <div role="status" className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-xs text-indigo-900">Acting as <strong>{authorityContext.authority.roleName}</strong> for <strong>{authorityContext.operationalSubject.fullName}</strong>. Available report actions follow this authority’s effective permissions. Uploaded Report authoring remains unavailable while delegated.</div>}
 
       {/* Filter Tabs Bar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -160,11 +184,16 @@ export const ReportsPage: React.FC = () => {
           </div>
         ) : (
           filteredReports.map((rep) => {
-            const isAuthor = rep.createdById === currentUser.id;
+            const isAuthor = belongsToOperationalSubject(rep, subjectId);
             const isSupabaseReport = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(rep.id);
-            const isSupabaseActionableRecipient = rep.assignments?.some((a) => a.recipientUserId === currentUser.id && (!rep.currentSendCycleId || a.sendCycleId === rep.currentSendCycleId) && a.assignmentStatus === 'pending' && rep.signatureAssignments?.some((m) => m.reportAssignmentId === a.id && m.recipientUserId === currentUser.id && m.sendCycleId === rep.currentSendCycleId));
-            const isAssignedRecipient = isSupabaseReport ? isSupabaseActionableRecipient : (rep.assignments?.some((a) => a.recipientUserId === currentUser.id) || rep.sentToId === currentUser.id);
-            const tpl = templates.find((t) => t.id === rep.templateId);
+            const operationalAssignment = isSupabaseReport ? getOperationalReportAssignment(rep, subjectId) : null;
+            const hasSignatureMapping = isSupabaseReport && hasOperationalReportSignatureAssignment(rep, operationalAssignment, subjectId);
+            const isSupabaseActionableRecipient = Boolean(operationalAssignment && (rep.sourceType === 'uploaded' || hasSignatureMapping));
+            const isAssignedRecipient = isSupabaseReport ? isSupabaseActionableRecipient : (rep.assignments?.some((a) => a.recipientUserId === subjectId) || rep.sentToId === subjectId);
+            const canShowRecipientActions = !isDelegatedMode || (isSupabaseReport && rep.sourceType === 'template');
+            const latestSignature = rep.signatureHistory?.slice().sort((left, right) => Date.parse(left.signedAt) - Date.parse(right.signedAt)).at(-1) ?? rep.signature;
+            const latestSignatureDelegation = getDelegatedSignatureSnapshot(latestSignature);
+            const tpl = rep.sourceType === 'template' ? templates.find((t) => t.id === rep.templateId) : undefined;
 
             return (
               <div
@@ -178,14 +207,13 @@ export const ReportsPage: React.FC = () => {
                     <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
                       {rep.title}
                     </h3>
-                    <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                      {rep.categoryName}
-                    </span>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${rep.sourceType === 'uploaded' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>{rep.sourceType === 'uploaded' ? 'Uploaded Report' : 'Template Report'}</span>
+                    {rep.categoryName && <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{rep.categoryName}</span>}
                   </div>
                   {rep.displayId && <div className="text-[11px] font-mono text-slate-400">{rep.displayId}</div>}
 
                   <div className="text-xs text-slate-500 flex flex-wrap items-center gap-3">
-                    <span>Template: <strong className="text-slate-700">{rep.templateName}</strong></span>
+                    {rep.sourceType === 'template' && <span>Template: <strong className="text-slate-700">{rep.templateName}</strong></span>}
                     <span>•</span>
                     <span className="flex items-center gap-1">
                       <UserIcon className="w-3 h-3 text-slate-400" />
@@ -214,10 +242,10 @@ export const ReportsPage: React.FC = () => {
                   )}
 
                   {/* Signature details snippet if signed */}
-                  {rep.status === 'Signed' && rep.signature && (
+                  {rep.status === 'Signed' && latestSignature && (
                     <div className="mt-1 text-[11px] text-emerald-800 font-semibold bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 w-fit flex items-center gap-1">
                       <Shield className="w-3.5 h-3.5 text-emerald-600" />
-                      Signed by {rep.signature.signedByName} ({rep.signature.signedByRole}) • {rep.signature.verificationId}
+                      Signed by {latestSignature.signedByName} ({latestSignature.signedByRole}){latestSignatureDelegation ? ` · Acting as ${latestSignatureDelegation.authorityRoleName} for ${latestSignatureDelegation.delegatedByName}` : ''} • {latestSignature.verificationId}
                     </div>
                   )}
                 </div>
@@ -232,17 +260,21 @@ export const ReportsPage: React.FC = () => {
                     {/* Author Actions */}
                     {isAuthor && rep.status !== 'Signed' && (
                       <>
-                        {(rep.status === 'Draft' || rep.status === 'Returned') && tpl && hasPermission('reports.edit_draft') && (
+                        {!isDelegatedMode && rep.sourceType === 'uploaded' && rep.status === 'Draft' && (hasPermission('reports.create') || hasPermission('reports.edit_draft')) && (
+                          <button onClick={() => { setReportForDocumentUpload(rep); setShowUploadedModal(true); }} className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"><UploadCloud className="h-3.5 w-3.5" /><span>{rep.returnedAt ? 'Upload Corrected Report' : rep.currentDocumentVersionId ? 'Upload New Version' : 'Upload Report File'}</span></button>
+                        )}
+                        {rep.sourceType === 'template' && (rep.status === 'Draft' || rep.status === 'Returned') && tpl && hasOperationalPermission('reports.edit_draft') && (
                           <button
                             onClick={() => openFillReportModal(tpl, rep)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                            disabled={reportEditLoadingId === rep.id}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer disabled:cursor-wait disabled:opacity-60"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
-                            <span>Edit</span>
+                            <span>{reportEditLoadingId === rep.id ? 'Loading report…' : 'Edit'}</span>
                           </button>
                         )}
 
-                        {rep.status === 'Draft' && hasPermission('reports.complete') && (
+                        {rep.sourceType === 'template' && rep.status === 'Draft' && hasOperationalPermission('reports.complete') && (
                           <button
                             onClick={() => markReportCompleted(rep.id)}
                             className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
@@ -252,30 +284,30 @@ export const ReportsPage: React.FC = () => {
                           </button>
                         )}
 
-                        {(rep.status === 'Completed' || rep.status === 'Returned') && hasPermission('reports.send') && (
+                        {rep.status === 'Completed' && hasOperationalPermission('reports.send') && (
                           <button
                             onClick={() => openSendReportModal(rep)}
                             className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
                           >
                             <Send className="w-3.5 h-3.5" />
-                            <span>{rep.status === 'Returned' ? 'Resend' : 'Send'}</span>
+                            <span>Send</span>
                           </button>
                         )}
                       </>
                     )}
 
                     {/* Recipient Review Actions */}
-                    {isAssignedRecipient && rep.status === 'Sent' && (
+                    {canShowRecipientActions && isAssignedRecipient && rep.status === 'Sent' && (
                       <>
-                        {hasPermission('reports.return') && <button
+                        {hasOperationalPermission('reports.return') && <button
                           onClick={() => openReturnReportModal(rep)}
                           className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
                           <span>Return</span>
                         </button>}
-                        {hasPermission('reports.reject') && <button onClick={() => openRejectReportModal(rep)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"><XCircle className="w-3.5 h-3.5" /><span>Reject</span></button>}
-                        {hasPermission('reports.sign') && (!isSupabaseReport || rep.signatureAssignments?.some((mapping) => mapping.recipientUserId === currentUser.id && mapping.sendCycleId === rep.currentSendCycleId)) && <button
+                        {rep.sourceType === 'template' && hasOperationalPermission('reports.reject') && <button onClick={() => openRejectReportModal(rep)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"><XCircle className="w-3.5 h-3.5" /><span>Reject</span></button>}
+                        {rep.sourceType === 'template' && hasOperationalPermission('reports.sign') && (!isSupabaseReport || hasSignatureMapping) && <button
                           onClick={() => openSignReportModal(rep)}
                           className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
                         >
@@ -300,6 +332,7 @@ export const ReportsPage: React.FC = () => {
           })
         )}
       </div>
+      {!isDelegatedMode && showUploadedModal && (reportForDocumentUpload ? (hasPermission('reports.create') || hasPermission('reports.edit_draft')) : hasPermission('reports.create')) && <UploadedReportModal existingReport={reportForDocumentUpload} onClose={() => { setShowUploadedModal(false); setReportForDocumentUpload(null); }} />}
     </div>
   );
 };

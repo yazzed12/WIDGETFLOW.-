@@ -7,6 +7,7 @@ import { DateSearchFilter } from '../features/search/components/DateSearchFilter
 import { matchesDateRange } from '../features/search/dateRangeFilter';
 import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
 import { formatDateTime } from '../shared/dateTime';
+import { OrganizationDelegationsPanel } from '../components/delegations/OrganizationDelegationsPanel';
 
 const labels: Array<{ key: ActivityCategory | null; label: string }> = [
   { key: null, label: 'All' }, { key: 'template', label: 'Templates' }, { key: 'report', label: 'Reports' }, { key: 'signature', label: 'Signatures' },
@@ -23,7 +24,8 @@ function EventRow({ event }: { event: OrganizationActivityEvent }) {
   const Icon = event.category === 'template' ? FileText : event.category === 'signature' ? FileSignature : CheckCircle2;
   return <div className="flex gap-3 py-4 border-b border-slate-100 last:border-0">
     <div className="mt-0.5 rounded-lg bg-indigo-50 p-2 text-indigo-600"><Icon className="w-4 h-4" /></div>
-    <div className="min-w-0 flex-1"><p className="text-sm text-slate-800"><span className="font-semibold text-slate-900">{event.actorName}</span>{' '}<span>{event.description || event.actionLabel}</span>{' '}<span className="font-semibold text-indigo-700">“{event.entityDisplayName}”</span></p>
+    <div className="min-w-0 flex-1"><p className="text-sm text-slate-800"><span className="font-semibold text-slate-900">{event.actorName}</span>{event.actorRoleName && <span className="text-slate-500"> ({event.actorRoleName})</span>}{' '}<span>{event.description || event.actionLabel}</span>{' '}<span className="font-semibold text-indigo-700">“{event.entityDisplayName}”</span></p>
+      {event.delegationId && event.delegatedByName && <p className="mt-1 text-xs font-medium text-indigo-700">Acting as {event.authorityRoleName || event.actorRoleName} for {event.delegatedByName}</p>}
       {event.reason && <p className="mt-1 text-xs text-slate-600 italic">Reason: {event.reason}</p>}
       <p className="mt-1 text-[11px] text-slate-400">{formatDateTime(event.occurredAt)}</p>
     </div>
@@ -52,6 +54,7 @@ export const OrganizationActivityPage: React.FC = () => {
   ])), [events, searchTerm, dateFilter]);
   const grouped = useMemo(() => filteredEvents.reduce<Record<string, OrganizationActivityEvent[]>>((acc, event) => { (acc[dayGroup(event.occurredAt)] ??= []).push(event); return acc; }, {}), [filteredEvents]);
   return <div className="space-y-6 pb-12"><div className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Activity className="w-6 h-6 text-indigo-600" />Organization Activity</h1><p className="text-sm text-slate-500 mt-1">Canonical business workflow activity across your organization.</p></div><button type="button" onClick={() => void load(false)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><RefreshCw className="w-4 h-4 inline mr-1" />Refresh</button></div>
+    <OrganizationDelegationsPanel />
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap gap-2">{labels.map((item) => <button type="button" key={item.label} onClick={() => setCategory(item.key)} className={`rounded-full px-4 py-2 text-xs font-semibold ${category === item.key ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-indigo-300'}`}>{item.label}</button>)}</div><div className="flex w-full items-center gap-2 sm:w-auto"><input type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search activity by person, action, or name…" aria-label="Search organization activity" className="w-full sm:w-80 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-indigo-500 focus:outline-none" /><DateSearchFilter value={dateFilter} onChange={setDateFilter} /></div></div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4">{loading ? <div className="py-12 text-center text-sm text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline mr-2" />Loading activity…</div> : error ? <div className="py-12 text-center text-sm text-rose-600">{error}</div> : !filteredEvents.length ? <div className="py-12 text-center text-sm text-slate-500">{events.length ? 'No activity matches your search.' : 'No organization activity to show yet.'}</div> : Object.entries(grouped).map(([group, items]) => <section key={group}><h2 className="pt-2 pb-1 text-xs font-bold uppercase tracking-wider text-slate-400">{group}</h2>{items.map((event) => <EventRow key={event.id} event={event} />)}</section>)}{!loading && !error && cursor && <button type="button" disabled={loadingMore} onClick={() => void load(true)} className="mt-4 w-full rounded-lg border border-slate-200 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-50">{loadingMore ? 'Loading…' : 'Load more'}</button>}</div>
   </div>;

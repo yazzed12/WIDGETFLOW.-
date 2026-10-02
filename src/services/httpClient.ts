@@ -33,7 +33,14 @@ export async function authenticatedBinaryRequest(endpoint: string): Promise<{ bl
   }
   const headers = new Headers();
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
-  const response = await fetch(requestUrl, { method: 'GET', headers, credentials: 'include' });
+  // The protected asset gateway authenticates with the bearer token above;
+  // it does not use browser cookies. Omitting credentials avoids requiring
+  // Access-Control-Allow-Credentials on this cross-origin Edge Function.
+  const response = await fetch(requestUrl, {
+    method: 'GET',
+    headers,
+    credentials: assetMatch ? 'omit' : 'include',
+  });
   if (!response.ok) {
     let message = `Request failed with status ${response.status}.`;
     let code = 'API_ERROR';

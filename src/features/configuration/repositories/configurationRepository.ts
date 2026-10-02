@@ -1,5 +1,7 @@
 import { getSupabaseBrowserClient } from '../../../lib/supabase/client';
 import type { AdminPack, ContentLibraryItem, SystemEffectiveConfig } from '../../../types';
+import type { FeatureAccessState } from '../../insights/featureAccessTypes';
+import { mapCurrentFeatureAccess } from '../../insights/featureAccessMappers';
 
 type Row = Record<string, any>;
 
@@ -32,6 +34,11 @@ async function rpc(name: string, args: Record<string, unknown> = {}): Promise<un
 }
 
 export const configurationRepository = {
+  async currentFeatureAccess(featureKey: string): Promise<FeatureAccessState> {
+    const { data, error } = await getSupabaseBrowserClient().rpc('current_feature_access', { p_feature_key: featureKey });
+    return mapCurrentFeatureAccess(requireData(data as Row | null, error), featureKey);
+  },
+
   async signatureRoleDirectory(): Promise<Array<{ key: string; name: string; roleType?: string }>> {
     const { data, error } = await getSupabaseBrowserClient().rpc('list_signature_role_directory');
     const rows = requireData(data as Row[] | null, error) as Row[];

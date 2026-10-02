@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import type { ReportInstance } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { X, RotateCcw, AlertCircle } from 'lucide-react';
+import { normalizeError } from '../../lib/errors/errorHandling';
+import { DelegatedActionNotice } from './DelegatedActionNotice';
 
 interface ReturnReportModalProps {
   report: ReportInstance;
@@ -12,16 +14,26 @@ export const ReturnReportModal: React.FC<ReturnReportModalProps> = ({ report, on
   const { returnReport } = useApp();
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!feedback.trim()) {
       setError('Please provide feedback explaining what needs to be changed.');
       return;
     }
-
-    returnReport(report.id, feedback.trim());
-    onClose();
+    setIsSubmitting(true);
+    setError('');
+    try {
+      await returnReport(report.id, feedback.trim(), report.sourceType);
+      onClose();
+    } catch (submitError) {
+      const rawCode = String((submitError as { code?: unknown })?.code ?? '').toUpperCase();
+      setError(rawCode === 'WORKSPACE_NOT_READY' ? 'Your report workspace is refreshing. Please try again.' : normalizeError(submitError).message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -49,6 +61,7 @@ export const ReturnReportModal: React.FC<ReturnReportModalProps> = ({ report, on
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          <DelegatedActionNotice action="Returning" />
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1">
               Requested Revisions & Feedback <span className="text-rose-500">*</span>
@@ -77,6 +90,7 @@ export const ReturnReportModal: React.FC<ReturnReportModalProps> = ({ report, on
           <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={onClose}
               className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
             >
@@ -85,10 +99,11 @@ export const ReturnReportModal: React.FC<ReturnReportModalProps> = ({ report, on
 
             <button
               type="submit"
+              disabled={isSubmitting}
               className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>Return Report</span>
+              <span>{isSubmitting ? 'Returning…' : 'Return Report'}</span>
             </button>
           </div>
         </form>

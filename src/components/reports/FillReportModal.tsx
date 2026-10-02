@@ -243,7 +243,6 @@ export const FillReportModal: React.FC<FillReportModalProps> = ({ template, onCl
       await reportService.saveDraft(persistedReport.id, canonicalData, reportTitle.trim() || defaultTitle);
       await persistSignatureConfigurations(persistedReport.id);
       const activeReport = (await updateReportInstance(persistedReport.id, canonicalData, reportTitle.trim() || defaultTitle, true))!;
-      await refreshReports();
 
       // Supabase Reports are intentionally send-blocked until Phase 4B.3;
       // never open the legacy recipient flow for a UUID-backed Report.

@@ -12,6 +12,7 @@ import {
   X,
   ShieldCheck,
   LogOut,
+  UserRoundCog,
 } from 'lucide-react';
 import { NotificationDropdown } from './NotificationDropdown';
 import { UserSignatureSettingsModal } from '../user/UserSignatureSettingsModal';
@@ -19,6 +20,8 @@ import { useAuth } from '../../features/auth/useAuth';
 import { toAuthError } from '../../features/auth/authErrors';
 import { navigateTo } from '../../features/auth/authRouting';
 import { matchesSearch } from '../../features/search/searchMatcher';
+import { formatDateTime } from '../../shared/dateTime';
+import { isOperationallyRelevantReport } from '../../features/delegations/operationalWorkspaceFilters';
 
 export const Navbar: React.FC = () => {
   const { logout } = useAuth();
@@ -35,6 +38,16 @@ export const Navbar: React.FC = () => {
     openReportViewModal,
     openProfileModal,
     hasPermission,
+    hasOperationalPermission,
+    hasTemplateApprovalPermission,
+    authorityContext,
+    operationalSubjectUserId,
+    isDelegatedMode,
+    authorityContextStatus,
+    operationalWorkspaceLoading,
+    clearDelegationContext,
+    setActiveView,
+    showToast,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -43,6 +56,7 @@ export const Navbar: React.FC = () => {
   const [showSigModal, setShowSigModal] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [returningToOwn, setReturningToOwn] = useState(false);
 
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -58,9 +72,8 @@ export const Navbar: React.FC = () => {
 
   // Search results calculation
   const approvedTemplates = templates.filter((t) => t.status === 'Approved');
-  const userAccessibleReports = reports.filter(
-    (r) => r.createdById === currentUser.id || r.assignments?.some((a) => a.recipientUserId === currentUser.id) || r.sentToId === currentUser.id || hasPermission('reports.view_organization')
-  );
+  const subjectId = operationalSubjectUserId ?? '';
+  const userAccessibleReports = reports.filter((report) => isOperationallyRelevantReport(report, subjectId) || hasOperationalPermission('reports.view_organization'));
 
   const matchingTemplates = searchTerm.trim()
     ? approvedTemplates.filter((t) => matchesSearch(searchTerm, [
@@ -124,6 +137,14 @@ export const Navbar: React.FC = () => {
     }
   };
 
+  const handleReturnToOwnRole = async () => {
+    if (returningToOwn || operationalWorkspaceLoading || authorityContextStatus !== 'ready') return;
+    setReturningToOwn(true);
+    const cleared = await clearDelegationContext();
+    if (cleared) showToast('Returned to your own role.', 'success');
+    setReturningToOwn(false);
+  };
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
       {/* Left: Mobile sidebar toggle + Global Search input */}
@@ -136,7 +157,7 @@ export const Navbar: React.FC = () => {
           <Menu className="w-5 h-5" />
         </button>
 
-        {hasPermission('search.use') && <div className="relative w-full" ref={searchRef}>
+        {hasOperationalPermission('search.use') && !operationalWorkspaceLoading && <div className="relative w-full" ref={searchRef}>
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -236,8 +257,12 @@ export const Navbar: React.FC = () => {
 
       {/* Right: Actions & Profile Dropdown */}
       <div className="flex items-center gap-2 sm:gap-4">
+        {isDelegatedMode && authorityContext?.delegation && <div className="flex max-w-[11rem] sm:max-w-[18rem] lg:max-w-[25rem] items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5" role="status" aria-live="polite">
+          <span className="min-w-0"><span className="block truncate text-[9px] font-extrabold uppercase tracking-wider text-indigo-600">Viewing {authorityContext.operationalSubject.fullName}’s workspace · Acting as {authorityContext.authority.roleName}</span><span className="hidden truncate text-[10px] font-semibold text-indigo-900 sm:block">{formatDateTime(authorityContext.delegation.startAt)} – {formatDateTime(authorityContext.delegation.endAt)} · You are {currentUser.name} ({currentUser.role})</span><span className="block truncate text-[9px] font-semibold text-indigo-900 sm:hidden">You are {currentUser.name} · {currentUser.role}</span><span className="block truncate text-[9px] font-medium text-indigo-700 sm:hidden">Until {formatDateTime(authorityContext.delegation.endAt)}</span></span>
+          <button type="button" onClick={() => void handleReturnToOwnRole()} disabled={returningToOwn || operationalWorkspaceLoading || authorityContextStatus !== 'ready'} className="shrink-0 rounded-md border border-indigo-200 bg-white px-1.5 py-1 text-[9px] font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 sm:px-2">{returningToOwn || operationalWorkspaceLoading || authorityContextStatus !== 'ready' ? '…' : <><span className="sm:hidden">Return</span><span className="hidden sm:inline">Return to My Role</span></>}</button>
+        </div>}
         {/* Request Chat Icon */}
-        {hasPermission('template_approvals.comment') && <button
+        {hasTemplateApprovalPermission('template_approvals.comment') && <button
           onClick={handleChatClick}
           className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
           title="Template Request Discussions"
@@ -300,6 +325,14 @@ export const Navbar: React.FC = () => {
               </div>
 
               <div className="py-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowUserMenu(false); setActiveView('delegations'); }}
+                  className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium cursor-pointer"
+                >
+                  <UserRoundCog className="w-4 h-4 text-slate-400" />
+                  <span>Delegations</span>
+                </button>
                 {hasPermission('signature_profile.use') && <button
                   onClick={() => {
                     setShowUserMenu(false);

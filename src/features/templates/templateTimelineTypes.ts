@@ -10,4 +10,10 @@ export interface TemplateTimelineEvent {
   actionLabel: string;
   description: string;
   reason: string | null;
+  delegationId?: string | null;
+  delegatedByUserId?: string | null;
+  delegatedByName?: string | null;
+  authorityRoleId?: string | null;
+  authorityRoleKey?: string | null;
+  authorityRoleName?: string | null;
 }

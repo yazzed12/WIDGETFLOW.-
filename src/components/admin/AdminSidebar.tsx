@@ -12,30 +12,35 @@ import {
   History,
   ShieldCheck,
   Database,
+  LineChart,
+  UserRoundCog,
 } from 'lucide-react';
 import type { AdminViewType } from '../../types';
 
 interface AdminSidebarProps {
   activeTab: AdminViewType;
   onSelectTab: (tab: AdminViewType) => void;
+  insightsVisible: boolean;
 }
 
 const ADMIN_NAV_ITEMS: Array<{ id: AdminViewType; label: string; icon: React.ReactNode }> = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
   { id: 'data-control', label: 'Data Control Center', icon: <Database className="w-4 h-4" /> },
   { id: 'features', label: 'Feature Management', icon: <Sliders className="w-4 h-4" /> },
+  { id: 'insights', label: 'Insights', icon: <LineChart className="w-4 h-4" /> },
   { id: 'studio-config', label: 'Template Studio Configuration', icon: <LayoutTemplate className="w-4 h-4" /> },
   { id: 'packs', label: 'Pack Management', icon: <Package className="w-4 h-4" /> },
   { id: 'elements', label: 'Element Management', icon: <Shapes className="w-4 h-4" /> },
   { id: 'content-library', label: 'Content Library Management', icon: <BookOpen className="w-4 h-4" /> },
   { id: 'users', label: 'Users & Access', icon: <Users className="w-4 h-4" /> },
+  { id: 'delegations', label: 'Delegations', icon: <UserRoundCog className="w-4 h-4" /> },
   { id: 'roles', label: 'Roles & Permissions', icon: <ShieldCheck className="w-4 h-4" /> },
   { id: 'categories', label: 'Categories', icon: <FolderKanban className="w-4 h-4" /> },
   { id: 'settings', label: 'System Settings', icon: <Settings className="w-4 h-4" /> },
   { id: 'audit', label: 'Audit Log', icon: <History className="w-4 h-4" /> },
 ];
 
-export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onSelectTab }) => {
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onSelectTab, insightsVisible }) => {
   return (
     <aside className="w-64 bg-slate-950 text-slate-300 flex flex-col h-full border-r border-slate-800/80 shrink-0 select-none">
       <div className="p-4 space-y-1">
@@ -43,7 +48,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onSelectT
           Admin Administration
         </span>
         <nav className="space-y-1 pt-2">
-          {ADMIN_NAV_ITEMS.map((item) => {
+          {ADMIN_NAV_ITEMS.filter((item) => item.id !== 'insights' || insightsVisible).map((item) => {
             const isActive = activeTab === item.id;
             return (
               <button

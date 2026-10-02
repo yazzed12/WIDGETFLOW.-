@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const utils = fs.readFileSync('src/shared/display-tools/displayUtils.ts', 'utf8');
+const imageRenderer = fs.readFileSync('src/components/dynamic-template/TemplateComponentRenderer.tsx', 'utf8');
+const assetImage = fs.readFileSync('src/components/common/AuthenticatedAssetImage.tsx', 'utf8');
+const httpClient = fs.readFileSync('src/services/httpClient.ts', 'utf8');
+const builder = fs.readFileSync('src/components/template-builder/BuilderComponent.tsx', 'utf8');
+const preview = fs.readFileSync('src/components/template-builder/TemplatePreviewModal.tsx', 'utf8');
+const testRun = fs.readFileSync('src/components/template-builder/TemplateTestRunModal.tsx', 'utf8');
+const uploadCaller = fs.readFileSync('src/components/template-builder/PropertiesPanel.tsx', 'utf8');
+const importer = fs.readFileSync('src/components/template-builder/StudioWelcomeModal.tsx', 'utf8');
+const gateway = fs.readFileSync('supabase/functions/asset-gateway/index.ts', 'utf8');
+const templateRls = fs.readFileSync('supabase/migrations/023_template_domain_operations.sql', 'utf8');
+const reviewerRls = fs.readFileSync('supabase/migrations/059_template_dynamic_pending_reviewer_eligibility.sql', 'utf8');
+const serializer = fs.readFileSync('src/features/templates/mappers/templateSerializer.ts', 'utf8');
+const attachment = fs.readFileSync('src/components/dynamic-template/FileAttachmentControl.tsx', 'utf8');
+
+assert.match(utils, /ASSET_UUID_RE\.test\(rawUrl\)[\s\S]*`\/api\/assets\/\$\{rawUrl\}`/);
+assert.match(utils, /ASSET_UUID_RE\.test\(rawAssetId\)[\s\S]*`\/api\/assets\/\$\{rawAssetId\}`/);
+assert.match(imageRenderer, /const resolvedUrl = resolveAssetUrl\(rawUrl, rawId\)/);
+assert.match(imageRenderer, /<AuthenticatedAssetImage[\s\S]*src=\{resolvedUrl\}[\s\S]*onAssetError/);
+assert.match(imageRenderer, /We couldn't load this image/);
+assert.doesNotMatch(imageRenderer, /The image asset referenced at/);
+assert.match(assetImage, /authenticatedBinaryRequest\(src\)/);
+assert.match(assetImage, /authenticatedBinaryRequest\(src\)[\s\S]*onAssetError\?\.\(\)/);
+assert.match(httpClient, /headers\.set\('Authorization', `Bearer \$\{accessToken\}`\)/);
+assert.match(httpClient, /credentials: assetMatch \? 'omit' : 'include'/);
+assert.match(httpClient, /functions\/v1\/asset-gateway\/\$\{assetMatch\[1\]\}/);
+assert.match(builder, /case 'image':[\s\S]*BuilderImagePreview component=\{component\}/);
+assert.match(builder, /resolveAssetUrl\(imageConfig\.assetUrl \|\| component\.assetUrl, imageConfig\.assetId \|\| component\.assetId\)/);
+assert.match(preview, /<DynamicTemplateRenderer/);
+assert.match(testRun, /<DynamicTemplateRenderer/);
+assert.match(uploadCaller, /assetUrl: data\.url,[\s\S]*assetId: data\.id/);
+assert.match(importer, /imageConfig: \{ \.\.\.\(component\.imageConfig \|\| \{\}\), assetId: uploadedAsset\.id, assetUrl: uploadedAsset\.url \}/);
+assert.match(serializer, /\.\.\.component,[\s\S]*order: globalOrder\+\+/);
+assert.match(serializer, /\.\.\.\(field\.configuration \?\? \{\}\)/);
+assert.match(gateway, /url: purpose === 'template_asset' \? `\/api\/assets\/\$\{asset\.id\}` : asset\.id/);
+assert.match(gateway, /async function canReadTemplate\([\s\S]*verified\.userClient[\s\S]*\.from\('templates'\)[\s\S]*\.eq\('id', templateId\)/);
+assert.match(gateway, /\.download\(asset\.object_path\)/);
+assert.match(templateRls, /templates_read_own[\s\S]*created_by_user_id=auth\.uid\(\)/);
+assert.match(templateRls, /templates_read_approved[\s\S]*status='approved'/);
+assert.match(reviewerRls, /templates_read_queue[\s\S]*current_user_can_review_template\(id\)/);
+assert.match(attachment, /apiService\.uploadAsset\([\s\S]*purpose: 'report_attachment'[\s\S]*linkedReportId: canonicalReportId/);
+assert.match(gateway, /url: purpose === 'template_asset'[\s\S]*: asset\.id/);
+
+console.log('Template asset read static checks passed.');

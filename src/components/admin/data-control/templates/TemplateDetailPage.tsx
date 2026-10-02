@@ -39,7 +39,7 @@ export const TemplateDetailPage: React.FC<TemplateDetailPageProps> = ({
   const normalizedTemplate = normalizeReportTemplateSnapshot(template);
 
   // Derived usage reports
-  const usageReports = allReports.filter((r: ReportInstance) => r.templateId === template.id);
+  const usageReports = allReports.filter((r: ReportInstance) => r.sourceType === 'template' && r.templateId === template.id);
 
   const categoryName = resolveCategoryName(
     template.categoryId,

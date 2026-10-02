@@ -19,6 +19,12 @@ export const templateTimelineRepository = {
       actionLabel: String(row.action_label ?? 'Template updated'),
       description: String(row.description ?? ''),
       reason: row.reason ?? null,
+      delegationId: row.delegation_id ?? row.delegationId ?? null,
+      delegatedByUserId: row.delegated_by_user_id ?? row.delegatedByUserId ?? null,
+      delegatedByName: row.delegated_by_name ?? row.delegatedByName ?? null,
+      authorityRoleId: row.authority_role_id ?? row.authorityRoleId ?? null,
+      authorityRoleKey: row.authority_role_key ?? row.authorityRoleKey ?? null,
+      authorityRoleName: row.authority_role_name ?? row.authorityRoleName ?? null,
     }));
   },
 };

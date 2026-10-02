@@ -29,6 +29,10 @@ import { NotificationsPage } from './pages/NotificationsPage';
 import { EngineProofPage } from './pages/EngineProofPage';
 import { OrganizationActivityPage } from './pages/OrganizationActivityPage';
 import { StickyNotesPage } from './pages/StickyNotesPage';
+import { InsightsPage } from './pages/InsightsPage';
+import { canAccessInsights } from './features/insights/templateInsightsAccess';
+import { DelegationsPage } from './pages/DelegationsPage';
+import { canAuthorTemplate, canCreateTemplateBackedReport } from './features/delegations/effectiveAuthority';
 
 import { SystemConfigProvider } from './context/SystemConfigContext';
 import { AdminLayout } from './components/admin/AdminLayout';
@@ -41,35 +45,51 @@ import { resolveAuthView } from './features/auth/authGate';
 import { principalToAppUser } from './features/auth/authTypes';
 
 const MainContent: React.FC = () => {
-  const { activeView, hasPermission } = useApp();
+  const { activeView, hasPermission, hasTemplateApprovalPermission, insightsAccess, authorityContextStatus, operationalWorkspaceLoading, operationalWorkspaceError, reportsError, refreshReports, refreshAuthorityContext, canOpenOperationalReadView, isDelegatedMode } = useApp();
+
+  if (operationalWorkspaceLoading || authorityContextStatus === 'loading') {
+    return <main className="min-h-0 flex-1 overflow-y-auto p-8"><output aria-live="polite" className="block rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Refreshing your operational workspace…</output></main>;
+  }
+  if (authorityContextStatus !== 'ready' || operationalWorkspaceError) {
+    return <main className="min-h-0 flex-1 overflow-y-auto p-8"><section role="alert" className="mx-auto max-w-lg rounded-xl border border-amber-200 bg-white p-6 text-center shadow-xs"><h1 className="text-sm font-bold text-slate-900">Workspace unavailable</h1><p className="mt-2 text-xs text-slate-600">{operationalWorkspaceError || 'Your authority could not be verified. No workspace data is being shown.'}</p><button type="button" onClick={() => void refreshAuthorityContext()} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Retry</button></section></main>;
+  }
 
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
         return <DashboardPage />;
       case 'templates':
-        return hasPermission('templates.view_approved') ? <TemplatesPage /> : <DashboardPage />;
+        return canOpenOperationalReadView('templates') ? <TemplatesPage /> : <DashboardPage />;
       case 'my-requests':
-        return hasPermission('templates.create') || hasPermission('templates.edit_own_draft') ? <MyRequestsPage /> : <DashboardPage />;
+        return canOpenOperationalReadView('my-requests') ? <MyRequestsPage /> : <DashboardPage />;
       case 'approvals':
-        return hasPermission('template_approvals.view') ? <ApprovalsPage /> : <DashboardPage />;
+        return authorityContextStatus === 'ready' && hasTemplateApprovalPermission('template_approvals.view') ? <ApprovalsPage /> : <DashboardPage />;
+      case 'delegations':
+        return <DelegationsPage />;
       case 'reports':
-        return hasPermission('reports.view_own') || hasPermission('reports.view_received') || hasPermission('reports.view_organization') ? <ReportsPage /> : <DashboardPage />;
+        return canOpenOperationalReadView('reports') ? <ReportsPage /> : <DashboardPage />;
+      case 'insights':
+        return !isDelegatedMode && canAccessInsights(insightsAccess)
+          ? <InsightsPage />
+          : insightsAccess.status === 'loading'
+            ? <output aria-live="polite" className="block rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Checking Insights access…</output>
+            : <DashboardPage />;
       case 'notifications':
         return hasPermission('notifications.view') ? <NotificationsPage /> : <DashboardPage />;
       case 'organization-activity':
-        return hasPermission('audit_history.view') ? <OrganizationActivityPage /> : <DashboardPage />;
+        return !isDelegatedMode && hasPermission('audit_history.view') ? <OrganizationActivityPage /> : <DashboardPage />;
       case 'sticky-notes':
-        return <StickyNotesPage />;
+        return isDelegatedMode ? <DashboardPage /> : <StickyNotesPage />;
       case 'engine-proof':
-        return <EngineProofPage />;
+        return isDelegatedMode ? <DashboardPage /> : <EngineProofPage />;
       default:
         return <DashboardPage />;
     }
   };
 
   return (
-    <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+    <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+      {reportsError && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"><span>{reportsError}</span><button type="button" onClick={() => void refreshReports()} className="font-semibold underline underline-offset-2">Retry</button></div>}
       {renderView()}
     </main>
   );
@@ -102,12 +122,19 @@ const GlobalModals: React.FC = () => {
     selectedReportForSign,
     closeSignReportModal,
     closeProfileModal,
-    hasPermission,
+    hasOperationalPermission,
+    insightsAccess,
+    isDelegatedMode,
+    operationalWorkspaceLoading,
   } = useApp();
+  const canOpenDraftRevision = Boolean(draftToEdit?.id) && canAccessInsights(insightsAccess);
+  const canAuthorTemplates = canAuthorTemplate(hasOperationalPermission, draftToEdit?.id);
+
+  if (operationalWorkspaceLoading) return null;
 
   return (
     <>
-      {isAddModalOpen && hasPermission('templates.create') && hasPermission('studio.access') && (
+      {isAddModalOpen && (canAuthorTemplates || (!isDelegatedMode && canOpenDraftRevision)) && (
         <React.Suspense fallback={<div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center text-white font-bold text-sm">Loading Studio...</div>}>
           <TemplateBuilder
             initialTemplate={draftToEdit}
@@ -137,7 +164,7 @@ const GlobalModals: React.FC = () => {
         />
       )}
 
-      {selectedTemplateForFill && hasPermission('templates.use') && hasPermission('reports.create') && (
+      {selectedTemplateForFill && canCreateTemplateBackedReport(hasOperationalPermission) && (
         <FillReportModal
           template={selectedTemplateForFill}
           onClose={closeFillReportModal}
@@ -151,28 +178,28 @@ const GlobalModals: React.FC = () => {
         />
       )}
 
-      {selectedReportForSend && hasPermission('reports.send') && (
+      {selectedReportForSend && hasOperationalPermission('reports.send') && (!isDelegatedMode || selectedReportForSend.sourceType === 'template') && (
         <SendReportModal
           report={selectedReportForSend}
           onClose={closeSendReportModal}
         />
       )}
 
-      {selectedReportForReturn && hasPermission('reports.return') && (
+      {selectedReportForReturn && hasOperationalPermission('reports.return') && (
         <ReturnReportModal
           report={selectedReportForReturn}
           onClose={closeReturnReportModal}
         />
       )}
 
-      {selectedReportForReject && hasPermission('reports.reject') && (
+      {selectedReportForReject && hasOperationalPermission('reports.reject') && (
         <RejectReportModal
           report={selectedReportForReject}
           onClose={closeRejectReportModal}
         />
       )}
 
-      {selectedReportForSign && hasPermission('reports.sign') && (
+      {selectedReportForSign && hasOperationalPermission('reports.sign') && (
         <SignReportModal
           report={selectedReportForSign}
           onClose={closeSignReportModal}
@@ -198,14 +225,14 @@ const AppShell: React.FC = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 font-sans overflow-hidden">
+    <div className="h-dvh min-h-0 flex flex-col bg-slate-50 font-sans overflow-hidden">
       {/* Main Application Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="min-h-0 flex-1 flex overflow-hidden">
         {/* Left Sidebar */}
         <Sidebar />
 
         {/* Main Area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="min-h-0 flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* Top Navbar */}
           <Navbar />
 
@@ -224,16 +251,16 @@ const AppShell: React.FC = () => {
 };
 
 const WidgetFlowApplication: React.FC = () => {
-  const { principal } = useAuth();
+  const { principal, status, sessionGeneration } = useAuth();
   const appUser = React.useMemo(
     () => principal ? principalToAppUser(principal) : null,
     [principal],
   );
-  if (!appUser) return <AuthLoadingScreen />;
+  if (status !== 'authenticated' || !appUser) return <AuthLoadingScreen />;
 
   return (
     <SystemConfigProvider>
-      <AppProvider key={appUser.id} authenticatedPrincipal={appUser}>
+      <AppProvider key={`${appUser.id}:${sessionGeneration}`} authenticatedPrincipal={appUser}>
         <AppShell />
       </AppProvider>
     </SystemConfigProvider>

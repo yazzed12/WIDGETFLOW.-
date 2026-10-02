@@ -21,6 +21,7 @@ import { matchesSearch } from '../features/search/searchMatcher';
 import { DateSearchFilter } from '../features/search/components/DateSearchFilter';
 import { matchesDateRange } from '../features/search/dateRangeFilter';
 import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
+import { canAuthorTemplate, canCreateTemplateBackedReport } from '../features/delegations/effectiveAuthority';
 
 export const TemplatesPage: React.FC = () => {
   const {
@@ -33,7 +34,7 @@ export const TemplatesPage: React.FC = () => {
     openAddTemplateModal,
     openTemplateDetail,
     openFillReportModal,
-    hasPermission,
+    hasOperationalPermission,
     templatesLoading,
     templatesError,
     refreshTemplates,
@@ -88,7 +89,7 @@ export const TemplatesPage: React.FC = () => {
           </p>
         </div>
 
-        {hasPermission('templates.create') && hasPermission('studio.access') && <button
+        {canAuthorTemplate(hasOperationalPermission) && <button
           onClick={() => openAddTemplateModal()}
           className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors flex items-center gap-2 cursor-pointer shrink-0"
         >
@@ -246,7 +247,7 @@ export const TemplatesPage: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold text-slate-900 truncate">{tpl.name}</h4>{tpl.templateDisplayId && <span className="text-[10px] font-mono text-slate-400">{tpl.templateDisplayId}</span>}
+                        <h4 className="text-xs font-bold text-slate-900 truncate">{tpl.name}</h4>{tpl.templateDisplayId && <span className="text-[10px] font-mono text-slate-400">{tpl.templateDisplayId}</span>}{tpl.isPaused && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">Paused</span>}
                         <span className="bg-slate-100 text-slate-600 text-[9px] font-bold px-2 py-0.2 rounded border border-slate-200">
                           {getBusinessRevisionLabel(tpl.version)}
                         </span>
@@ -261,20 +262,24 @@ export const TemplatesPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {hasPermission('templates.use') && hasPermission('reports.create') && <button
+                        {hasOperationalPermission('templates.view_approved') && <button
+                      type="button"
                       onClick={() => openTemplateDetail(tpl)}
                       className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
                       title="Preview Template"
                     >
                       <Eye className="w-4 h-4" />
                     </button>}
-                    <button
+                    {canCreateTemplateBackedReport(hasOperationalPermission) && <button
+                      type="button"
                       onClick={() => openFillReportModal(tpl)}
-                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      disabled={tpl.isPaused}
+                      title={tpl.isPaused ? 'This Template is paused for new Reports.' : undefined}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      <span>Use Template</span>
-                    </button>
+                      <span>{tpl.isPaused ? 'Paused' : 'Use Template'}</span>
+                    </button>}
                   </div>
                 </div>
               ))}

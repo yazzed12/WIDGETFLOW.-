@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Category } from '../../types';
 import type { GovernanceLevel } from '../../shared/permissionCatalog';
-import { ArrowLeft, Save, Send, Eye, RotateCcw, RotateCw, CheckCircle2, Clock, Lock } from 'lucide-react';
+import { ArrowLeft, Save, Send, Eye, RotateCcw, RotateCw, CheckCircle2, Clock, Lock, ShieldAlert, Play, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 
 interface BuilderHeaderProps {
   mode?: 'template' | 'admin-pack';
@@ -18,6 +18,8 @@ interface BuilderHeaderProps {
   onRedo: () => void;
   onBack: () => void;
   onPreview: () => void;
+  onReadiness: () => void;
+  onTestRun: () => void;
   onSaveDraft: () => void;
   onSavePack?: () => void;
   onPublishPack?: () => void;
@@ -27,6 +29,11 @@ interface BuilderHeaderProps {
   isSaving: boolean;
   governanceLevel: GovernanceLevel;
   canSubmit: boolean;
+  leftPanelCollapsed: boolean;
+  rightPanelCollapsed: boolean;
+  onToggleLeftPanel: () => void;
+  onToggleRightPanel: () => void;
+  onFocusCanvas: () => void;
 }
 
 import { fetchTemplateSubmissionAction } from '../../utils/governanceUtils';
@@ -46,6 +53,8 @@ export const BuilderHeader: React.FC<BuilderHeaderProps> = ({
   onRedo,
   onBack,
   onPreview,
+  onReadiness,
+  onTestRun,
   onSaveDraft,
   onSavePack,
   onPublishPack,
@@ -55,6 +64,11 @@ export const BuilderHeader: React.FC<BuilderHeaderProps> = ({
   isSaving,
   governanceLevel,
   canSubmit,
+  leftPanelCollapsed,
+  rightPanelCollapsed,
+  onToggleLeftPanel,
+  onToggleRightPanel,
+  onFocusCanvas,
 }) => {
   const isApproved = status === 'Approved';
   const isPending = status === 'Pending Approval';
@@ -145,7 +159,19 @@ export const BuilderHeader: React.FC<BuilderHeaderProps> = ({
       </div>
 
       {/* Right Area: Undo/Redo, Preview, Save, Submit */}
-      <div className="flex items-center gap-2 self-end md:self-auto">
+      <div className="flex flex-wrap items-center justify-end gap-2 self-end md:self-auto max-w-full">
+        <div className="flex items-center gap-0.5 bg-slate-800 p-1 rounded-lg border border-slate-700/80" aria-label="Workspace panels">
+          <button type="button" onClick={onToggleLeftPanel} aria-label={leftPanelCollapsed ? 'Show resource panel' : 'Hide resource panel'} aria-expanded={!leftPanelCollapsed} title={leftPanelCollapsed ? 'Show resource panel' : 'Hide resource panel'} className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors cursor-pointer">
+            {leftPanelCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          </button>
+          <button type="button" onClick={onFocusCanvas} aria-label="Focus canvas" title="Focus Canvas" className="px-2 py-1.5 text-[10px] font-semibold text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1 cursor-pointer">
+            <Maximize2 className="w-3.5 h-3.5" /><span className="hidden xl:inline">Focus</span>
+          </button>
+          <button type="button" onClick={onToggleRightPanel} aria-label={rightPanelCollapsed ? 'Show properties panel' : 'Hide properties panel'} aria-expanded={!rightPanelCollapsed} title={rightPanelCollapsed ? 'Show properties panel' : 'Hide properties panel'} className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors cursor-pointer">
+            {rightPanelCollapsed ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
         {/* Undo / Redo */}
         <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700/80 mr-1">
           <button
@@ -174,6 +200,30 @@ export const BuilderHeader: React.FC<BuilderHeaderProps> = ({
           <Eye className="w-3.5 h-3.5 text-indigo-400" />
           <span>Preview</span>
         </button>
+
+        {!isAdminPackMode && (
+          <button
+            type="button"
+            onClick={onTestRun}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Simulate filling this template"
+          >
+            <Play className="w-3.5 h-3.5" />
+            <span>Test Run</span>
+          </button>
+        )}
+
+        {!isAdminPackMode && (
+          <button
+            type="button"
+            onClick={onReadiness}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-lg border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Check template readiness"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-300" />
+            <span>Readiness</span>
+          </button>
+        )}
 
         {/* Save Draft */}
         {!isAdminPackMode && !isApproved && (

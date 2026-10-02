@@ -2,6 +2,7 @@ import type { WidgetTemplate } from '../../../types';
 import { templateRepository } from '../repositories/templateRepository';
 import { templateTimelineRepository } from '../templateTimelineRepository';
 export const templateService = {
+  getWorkspaceCollections: (includePending: boolean) => templateRepository.getWorkspaceCollections(includePending),
   getTemplates: () => templateRepository.getTemplates(), getApprovedTemplates: () => templateRepository.getApprovedTemplates(),
   getCategories: () => templateRepository.getCategories(),
   getMyTemplates: () => templateRepository.getMyTemplates(), getPendingApprovals: () => templateRepository.getPendingApprovals(),
@@ -10,6 +11,7 @@ export const templateService = {
   claimReview: (id: string) => templateRepository.claimReview(id), approve: (id: string) => templateRepository.approve(id),
   reject: (id: string, reason: string) => templateRepository.reject(id, reason),
   returnForRevision: (id: string, reason: string) => templateRepository.returnForRevision(id, reason),
+  archiveAny: (id: string, reason: string) => templateRepository.archiveAny(id, reason),
   createRevision: (id: string) => templateRepository.createRevision(id),
   addComment: (id: string, message: string) => templateRepository.addComment(id, message),
   getTimeline: (id: string) => templateTimelineRepository.get(id),

@@ -6,6 +6,7 @@ import type {
   ReportComment,
 } from '../types';
 import { httpRequest } from './httpClient';
+import { buildTemplateAssetUploadBody, type TemplateAssetUploadPayload } from '../features/templates/templateAssetUpload';
 
 export type AssetGatewayUploadPayload = {
   filename?: string;
@@ -217,12 +218,14 @@ export const apiService = {
     if ((data as any)?.success === false) throw new Error((data as any)?.error?.message || 'Attachment linking failed.');
   },
 
-  async uploadTemplateAsset(payload: { filename?: string; mimeType?: string; base64Data: string; linkedTemplateId?: string }): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
-    const { data, error } = await (await import('../lib/supabase/client')).getSupabaseBrowserClient().functions.invoke('asset-gateway', { body: { ...payload, purpose: 'template_asset' } });
+  async uploadTemplateAsset(payload: TemplateAssetUploadPayload): Promise<{ id: string; url: string; filename?: string; mimeType?: string }> {
+    const body = buildTemplateAssetUploadBody(payload);
+    const { data, error } = await (await import('../lib/supabase/client')).getSupabaseBrowserClient().functions.invoke('asset-gateway', { body });
     if (error) throw error;
     return ((data as any)?.data ?? data) as any;
   },
 
+  /** Legacy compatibility endpoint. StudioWelcomeModal uses the canonical browser analyzer. */
   async analyzeTemplateImport(formData: FormData): Promise<any> {
     return httpRequest<any>('/api/template-import/analyze', { method: 'POST', body: formData });
   },

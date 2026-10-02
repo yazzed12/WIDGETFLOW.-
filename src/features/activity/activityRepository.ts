@@ -14,6 +14,15 @@ function mapRow(row: Row): OrganizationActivityEvent {
     actionLabel: String(row.action_label ?? 'Updated record'), description: String(row.description ?? ''),
     reason: (row.reason as string | null) ?? null, fromStatus: (row.from_status as string | null) ?? null,
     toStatus: (row.to_status as string | null) ?? null,
+    delegationId: (row.delegation_id as string | null) ?? null,
+    delegatedByUserId: (row.delegated_by_user_id as string | null) ?? null,
+    delegatedByName: (row.delegated_by_name_snapshot as string | null) ?? (row.delegated_by_name as string | null) ?? null,
+    authorityRoleId: (row.authority_role_id as string | null) ?? null,
+    authorityRoleKey: (row.authority_role_key_snapshot as string | null) ?? (row.authority_role_key as string | null) ?? null,
+    authorityRoleName: (row.authority_role_name_snapshot as string | null) ?? (row.authority_role_name as string | null) ?? null,
+    authorityGovernanceLevel: (row.authority_governance_level_snapshot as string | null) ?? (row.authority_governance_level as string | null) ?? null,
+    delegationStartAt: (row.delegation_start_at_snapshot as string | null) ?? null,
+    delegationEndAt: (row.delegation_end_at_snapshot as string | null) ?? null,
   };
 }
 

@@ -187,6 +187,29 @@ export function resolveEffectiveTheme(theme?: TemplateTheme): Required<TemplateT
   };
 }
 
+export function resolveDocumentSpacing(theme?: TemplateTheme) {
+  const spacing = resolveEffectiveTheme(theme).documentSpacing;
+  const values = {
+    compact: { section: '12px', component: '8px', page: '16px' },
+    standard: { section: '24px', component: '16px', page: '24px' },
+    spacious: { section: '32px', component: '24px', page: '32px' },
+  } as const;
+  return {
+    sectionGap: values[spacing.sectionGap].section,
+    componentGap: values[spacing.componentGap].component,
+    pagePadding: values[spacing.pagePadding].page,
+  };
+}
+
+export function resolveSectionStyle(theme?: TemplateTheme) {
+  const effTheme = resolveEffectiveTheme(theme);
+  return {
+    backgroundColor: effTheme.surfaceColor || '#ffffff',
+    borderColor: effTheme.borderColor || '#e2e8f0',
+    color: effTheme.textPrimaryColor || '#0f172a',
+  };
+}
+
 /**
  * Dynamic Style Inheritance Resolver:
  * Computes resolved visual style for a component based on:
@@ -240,7 +263,11 @@ export function resolveComponentStyle(
       fontSize,
       fontWeight,
       color: fontColor,
-      textAlign: (cfg.alignment || 'left') as any,
+      textAlign: (cfg.alignment || (comp as any).alignment || 'left') as any,
+      lineHeight: cfg.lineHeight && cfg.lineHeight !== 'theme' ? cfg.lineHeight : themeTypo.lineHeight || '1.2',
+      letterSpacing: cfg.letterSpacing && cfg.letterSpacing !== 'theme'
+        ? cfg.letterSpacing === 'tight' ? '-0.02em' : cfg.letterSpacing === 'wide' ? '0.04em' : 'normal'
+        : 'normal',
       marginTop: typeof cfg.spaceAbove === 'number' ? `${cfg.spaceAbove}px` : cfg.spaceAbove === 'large' ? '24px' : cfg.spaceAbove === 'medium' ? '16px' : '0px',
       marginBottom: typeof cfg.spaceBelow === 'number' ? `${cfg.spaceBelow}px` : cfg.spaceBelow === 'large' ? '24px' : cfg.spaceBelow === 'medium' ? '16px' : '8px',
       isOverridden: (cfg.fontFamily && cfg.fontFamily !== 'theme') || (cfg.fontColor && cfg.fontColor !== 'theme') || (cfg.fontSize && cfg.fontSize !== 'theme') || (cfg.fontWeight && cfg.fontWeight !== 'theme'),
@@ -278,7 +305,10 @@ export function resolveComponentStyle(
       fontSize,
       fontWeight: cfg.fontWeight && cfg.fontWeight !== 'theme' ? cfg.fontWeight : themeTypo.fontWeight,
       color: fontColor,
-      textAlign: (cfg.alignment || 'left') as any,
+      textAlign: (cfg.alignment || (comp as any).alignment || 'left') as any,
+      letterSpacing: cfg.letterSpacing && cfg.letterSpacing !== 'theme'
+        ? cfg.letterSpacing === 'tight' ? '-0.01em' : cfg.letterSpacing === 'wide' ? '0.03em' : 'normal'
+        : 'normal',
       lineHeight: cfg.lineHeight && cfg.lineHeight !== 'theme' ? cfg.lineHeight : themeTypo.lineHeight || '1.5',
       marginBottom: typeof cfg.paragraphSpacing === 'number' ? `${cfg.paragraphSpacing}px` : '12px',
       isOverridden: (cfg.fontFamily && cfg.fontFamily !== 'theme') || (cfg.fontColor && cfg.fontColor !== 'theme') || (cfg.fontSize && cfg.fontSize !== 'theme'),
@@ -296,6 +326,37 @@ export function resolveComponentStyle(
     fontWeight: bodyTypo.fontWeight,
     color: effTheme.textPrimaryColor,
     isOverridden: false,
+  };
+}
+
+/**
+ * Resolves optional element-level appearance overrides. An absent value means
+ * the renderer should keep its existing Theme/component default. This keeps
+ * old templates visually unchanged and avoids copying Theme tokens into every
+ * component.
+ */
+export function resolveElementAppearance(comp: any): {
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: string;
+  borderStyle?: 'solid' | 'dashed' | 'none';
+  borderRadius?: string;
+  padding?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  hasOverrides: boolean;
+} {
+  const appearance = comp?.appearance || {};
+  const customColor = (value: unknown): string | undefined => typeof value === 'string' && value && value !== 'theme' ? value : undefined;
+  const has = Object.keys(appearance).some((key) => appearance[key] !== undefined && appearance[key] !== 'theme');
+  return {
+    backgroundColor: customColor(appearance.backgroundColor),
+    borderColor: customColor(appearance.borderColor),
+    borderWidth: typeof appearance.borderWidth === 'number' ? `${appearance.borderWidth}px` : undefined,
+    borderStyle: appearance.borderStyle && appearance.borderStyle !== 'none' ? appearance.borderStyle : appearance.borderStyle === 'none' ? 'none' : undefined,
+    borderRadius: typeof appearance.borderRadius === 'number' ? `${appearance.borderRadius}px` : undefined,
+    padding: typeof appearance.padding === 'number' ? `${appearance.padding}px` : undefined,
+    textAlign: appearance.textAlign,
+    hasOverrides: has,
   };
 }
 
@@ -325,6 +386,7 @@ export function resolveFormStyle(comp: any, theme?: TemplateTheme) {
   };
 
   const localStyle = comp?.styleOverride || comp?.style || {};
+  const appearance = comp?.appearance || {};
 
   const labelFontFamily = localStyle.labelFontFamily && localStyle.labelFontFamily !== 'theme'
     ? localStyle.labelFontFamily
@@ -334,11 +396,15 @@ export function resolveFormStyle(comp: any, theme?: TemplateTheme) {
     ? localStyle.labelFontColor
     : labelStyleColorFallback(localStyle.labelColor, labelTypo.fontColor);
 
-  const fieldBg = localStyle.fieldBg && localStyle.fieldBg !== 'theme'
+  const fieldBg = appearance.backgroundColor && appearance.backgroundColor !== 'theme'
+    ? appearance.backgroundColor
+    : localStyle.fieldBg && localStyle.fieldBg !== 'theme'
     ? localStyle.fieldBg
     : fStyles.fieldBg || '#ffffff';
 
-  const borderColor = localStyle.borderColor && localStyle.borderColor !== 'theme'
+  const borderColor = appearance.borderColor && appearance.borderColor !== 'theme'
+    ? appearance.borderColor
+    : localStyle.borderColor && localStyle.borderColor !== 'theme'
     ? localStyle.borderColor
     : fStyles.borderColor || effTheme.borderColor || '#cbd5e1';
 
@@ -351,7 +417,12 @@ export function resolveFormStyle(comp: any, theme?: TemplateTheme) {
     captionColor: captionTypo.fontColor || effTheme.textMutedColor || '#64748b',
     fieldBg,
     borderColor,
-    borderRadius: fStyles.borderRadius === 'small' ? '6px' : fStyles.borderRadius === 'square' ? '0px' : '12px',
+    borderRadius: typeof appearance.borderRadius === 'number'
+      ? `${appearance.borderRadius}px`
+      : fStyles.borderRadius === 'small' ? '6px' : fStyles.borderRadius === 'square' ? '0px' : '12px',
+    borderWidth: typeof appearance.borderWidth === 'number' ? `${appearance.borderWidth}px` : undefined,
+    borderStyle: appearance.borderStyle === 'none' ? 'none' : appearance.borderStyle || undefined,
+    padding: typeof appearance.padding === 'number' ? `${appearance.padding}px` : undefined,
     density: fStyles.density || 'comfortable',
     isOverridden: Boolean(localStyle.labelFontFamily || localStyle.labelFontColor || localStyle.fieldBg || localStyle.borderColor),
   };
@@ -517,4 +588,3 @@ export function resolveSemanticColor(
       return effTheme.textPrimaryColor || '#0f172a';
   }
 }
-

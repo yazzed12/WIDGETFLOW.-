@@ -8,6 +8,7 @@ import {
   HelpCircle,
   FileText,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 import { matchesSearch } from '../../features/search/searchMatcher';
 
@@ -36,6 +37,7 @@ export const ContentLibraryPanel: React.FC<ContentLibraryPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [previewItem, setPreviewItem] = useState<ContentLibraryItem | null>(null);
 
   const fetchContentItems = async () => {
     try {
@@ -45,7 +47,7 @@ export const ContentLibraryPanel: React.FC<ContentLibraryPanelProps> = ({
       setItems(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('Failed to load content library items:', err);
-      setError(err.message || 'Unable to load organization content items.');
+      setError('Unable to load reusable content. Please retry.');
     } finally {
       setLoading(false);
     }
@@ -166,7 +168,7 @@ export const ContentLibraryPanel: React.FC<ContentLibraryPanelProps> = ({
                   {onInsertContentItem && (
                     <button
                       type="button"
-                      onClick={() => onInsertContentItem(item)}
+                      onClick={() => setPreviewItem(item)}
                       className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
                     >
                       <Plus className="w-3 h-3" /> Insert Content
@@ -178,6 +180,33 @@ export const ContentLibraryPanel: React.FC<ContentLibraryPanelProps> = ({
           )}
         </div>
       </div>
+
+      {previewItem && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 space-y-4" role="dialog" aria-modal="true" aria-labelledby="content-library-preview-title">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 id="content-library-preview-title" className="text-sm font-extrabold text-slate-900">{previewItem.name}</h3>
+                <p className="text-[10px] text-slate-500">{previewItem.category} · {previewItem.contentType}</p>
+              </div>
+              <button type="button" onClick={() => setPreviewItem(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer" aria-label="Close preview">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 whitespace-pre-wrap">
+              {previewItem.contentValue}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+              <button type="button" onClick={() => setPreviewItem(null)} className="px-3 py-1.5 bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer">Cancel</button>
+              {onInsertContentItem && (
+                <button type="button" onClick={() => { onInsertContentItem(previewItem); setPreviewItem(null); }} className="px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1">
+                  <Plus className="w-3.5 h-3.5" /> Insert Content
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

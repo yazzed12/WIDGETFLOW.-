@@ -26,7 +26,7 @@ const FEATURE_ICONS: Record<string, React.ReactNode> = {
   'studio.workflow': <GitMerge className="w-5 h-5 text-indigo-600" />,
 };
 
-export const AdminFeatureManagement: React.FC = () => {
+export const AdminFeatureManagement: React.FC<{ onManageInsightsAccess?: () => void }> = ({ onManageInsightsAccess }) => {
   const { updateFeature } = useSystemConfig();
   const [features, setFeatures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,7 +151,9 @@ export const AdminFeatureManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Toggle Switch Button */}
+                <div className="flex shrink-0 flex-col items-end gap-3">
+                {feat.feature_key === 'insights' && <button type="button" onClick={onManageInsightsAccess} className="whitespace-nowrap rounded-lg border border-indigo-200 bg-white px-3 py-2 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">Manage Access</button>}
+                {/* Existing global feature toggle remains independent of per-role/user access. */}
                 <button
                   type="button"
                   onClick={() => handleToggle(feat.feature_key, isEnabled)}
@@ -166,6 +168,7 @@ export const AdminFeatureManagement: React.FC = () => {
                     }`}
                   />
                 </button>
+                </div>
               </div>
             );
           })}

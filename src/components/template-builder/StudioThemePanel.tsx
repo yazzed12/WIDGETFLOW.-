@@ -130,41 +130,7 @@ export const StudioThemePanel: React.FC<StudioThemePanelProps> = ({
             </div>
           </div>
 
-          <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">Secondary Brand Color</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={effTheme.secondaryColor}
-                onChange={(e) => onUpdateTheme({ secondaryColor: e.target.value })}
-                className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer p-0 bg-transparent"
-              />
-              <input
-                type="text"
-                value={effTheme.secondaryColor}
-                onChange={(e) => onUpdateTheme({ secondaryColor: e.target.value })}
-                className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">Accent Highlight Color</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={effTheme.accentColor}
-                onChange={(e) => onUpdateTheme({ accentColor: e.target.value })}
-                className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer p-0 bg-transparent"
-              />
-              <input
-                type="text"
-                value={effTheme.accentColor}
-                onChange={(e) => onUpdateTheme({ accentColor: e.target.value })}
-                className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
+          <p className="text-[10px] text-slate-400">Secondary and accent tokens remain available for future supported report consumers.</p>
         </div>
       )}
 
@@ -275,6 +241,14 @@ export const StudioThemePanel: React.FC<StudioThemePanelProps> = ({
       {/* Sub-Panel 4: FORM STYLES */}
       {activeSection === 'form' && (
         <div className="space-y-4 bg-white p-3.5 rounded-2xl border border-slate-200">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[10px] font-bold text-slate-600">Field Background
+              <input type="color" value={effTheme.formStyles.fieldBg} onChange={(e) => onUpdateTheme({ formStyles: { ...effTheme.formStyles, fieldBg: e.target.value } })} className="mt-1 w-full h-8 rounded-lg border border-slate-200 cursor-pointer" />
+            </label>
+            <label className="text-[10px] font-bold text-slate-600">Field Border
+              <input type="color" value={effTheme.formStyles.borderColor} onChange={(e) => onUpdateTheme({ formStyles: { ...effTheme.formStyles, borderColor: e.target.value } })} className="mt-1 w-full h-8 rounded-lg border border-slate-200 cursor-pointer" />
+            </label>
+          </div>
           <div>
             <label className="block text-[11px] font-bold text-slate-700 mb-1">Field Border Radius</label>
             <div className="grid grid-cols-4 gap-1">
@@ -365,6 +339,16 @@ export const StudioThemePanel: React.FC<StudioThemePanelProps> = ({
               className="w-full h-8 rounded-lg border border-slate-200 cursor-pointer"
             />
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[10px] font-bold text-slate-600">Table Border
+              <input type="color" value={effTheme.tableStyles.borderColor} onChange={(e) => onUpdateTheme({ tableStyles: { ...effTheme.tableStyles, borderColor: e.target.value } })} className="mt-1 w-full h-8 rounded-lg border border-slate-200 cursor-pointer" />
+            </label>
+            <label className="text-[10px] font-bold text-slate-600">Table Density
+              <select value={effTheme.tableStyles.density} onChange={(e) => onUpdateTheme({ tableStyles: { ...effTheme.tableStyles, density: e.target.value as any } })} className="mt-1 w-full p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                <option value="compact">Compact</option><option value="standard">Standard</option><option value="comfortable">Comfortable</option>
+              </select>
+            </label>
+          </div>
         </div>
       )}
 
@@ -415,6 +399,14 @@ export const StudioThemePanel: React.FC<StudioThemePanelProps> = ({
                 >
                   {g}
                 </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Page Padding</label>
+            <div className="grid grid-cols-3 gap-1">
+              {['compact', 'standard', 'spacious'].map((padding) => (
+                <button key={padding} type="button" onClick={() => onUpdateTheme({ documentSpacing: { ...effTheme.documentSpacing, pagePadding: padding as any } })} className={`py-1.5 px-2 text-[10px] font-bold capitalize rounded-lg border ${effTheme.documentSpacing.pagePadding === padding ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>{padding}</button>
               ))}
             </div>
           </div>

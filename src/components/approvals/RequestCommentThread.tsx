@@ -7,7 +7,7 @@ interface RequestCommentThreadProps {
 }
 
 export const RequestCommentThread: React.FC<RequestCommentThreadProps> = ({ templateId }) => {
-  const { requestComments, addRequestComment, currentUser, hasPermission } = useApp();
+  const { requestComments, addRequestComment, currentUser, hasTemplateApprovalPermission } = useApp();
   const [newMessage, setNewMessage] = useState('');
 
   const comments = requestComments
@@ -61,6 +61,7 @@ export const RequestCommentThread: React.FC<RequestCommentThreadProps> = ({ temp
                     {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
+                {comment.delegatedByName && comment.authorityRoleName && <p className="ml-6 text-[10px] font-semibold text-indigo-700">Acting as {comment.authorityRoleName} for {comment.delegatedByName}</p>}
                 <p className="text-xs text-slate-700 bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs leading-relaxed">
                   {comment.message}
                 </p>
@@ -71,7 +72,7 @@ export const RequestCommentThread: React.FC<RequestCommentThreadProps> = ({ temp
       </div>
 
       {/* Input Box */}
-      {hasPermission('template_approvals.comment') && <form onSubmit={handleSend} className="flex items-center gap-2">
+      {hasTemplateApprovalPermission('template_approvals.comment') && <form onSubmit={handleSend} className="flex items-center gap-2">
         <input
           type="text"
           value={newMessage}

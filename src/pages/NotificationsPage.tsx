@@ -20,6 +20,22 @@ import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
 
 type NotificationTab = 'All' | 'Unread' | 'Templates' | 'Reports' | 'Comments';
 
+const notificationTypeLabel = (type: Notification['type']) => ({
+  approval_required: 'Approval required',
+  template_review_requested: 'Template review requested',
+  template_review_requested_delegated: 'Delegated template review requested',
+  template_returned: 'Template returned for revision',
+  template_approved: 'Template approved',
+  template_rejected: 'Template rejected',
+  comment_added: 'Comment added',
+  report_received: 'Report received',
+  report_received_delegated: 'Delegated report received',
+  report_returned: 'Report returned',
+  report_signed: 'Report signed',
+  report_fully_signed: 'Report fully signed',
+  report_rejected: 'Report rejected',
+}[type] ?? 'Notification');
+
 export const NotificationsPage: React.FC = () => {
   const {
     currentUser,
@@ -28,6 +44,8 @@ export const NotificationsPage: React.FC = () => {
     reports,
     markNotificationRead,
     markAllNotificationsRead,
+    openDelegatedReportNotification,
+    showToast,
     openTemplateDetail,
     openReportViewModal,
     setActiveView,
@@ -47,7 +65,7 @@ export const NotificationsPage: React.FC = () => {
       || (activeTab === 'Templates' && (type.includes('template') || type === 'approval_required'))
       || (activeTab === 'Reports' && type.includes('report'))
       || (activeTab === 'Comments' && type === 'comment_added');
-    return matchesTab && matchesDateRange(n.timestamp, dateFilter) && matchesSearch(searchTerm, [n.title, n.message, n.type]);
+    return matchesTab && matchesDateRange(n.timestamp, dateFilter) && matchesSearch(searchTerm, [n.title, n.message, notificationTypeLabel(n.type)]);
   }), [userNotifications, activeTab, searchTerm, dateFilter]);
 
   // Timeline Grouping
@@ -80,6 +98,7 @@ export const NotificationsPage: React.FC = () => {
     switch (type) {
       case 'approval_required':
       case 'template_review_requested':
+      case 'template_review_requested_delegated':
         return <Clock className="w-4 h-4 text-amber-600" />;
       case 'template_returned':
         return <RotateCcw className="w-4 h-4 text-amber-600" />;
@@ -89,6 +108,7 @@ export const NotificationsPage: React.FC = () => {
       case 'report_rejected':
         return <AlertCircle className="w-4 h-4 text-rose-600" />;
       case 'report_received':
+      case 'report_received_delegated':
         return <FileSpreadsheet className="w-4 h-4 text-indigo-600" />;
       case 'report_returned':
         return <RotateCcw className="w-4 h-4 text-amber-600" />;
@@ -101,20 +121,29 @@ export const NotificationsPage: React.FC = () => {
     }
   };
 
-  const handleNotificationClick = (notif: Notification) => {
+  const handleNotificationClick = async (notif: Notification) => {
     markNotificationRead(notif.id);
+
+    if (notif.type === 'report_received_delegated') {
+      if (!notif.delegationId || !notif.relatedReportId) {
+        showToast('This delegated notification cannot be opened because its report is no longer available.', 'warning');
+        return;
+      }
+      await openDelegatedReportNotification(notif.delegationId, notif.relatedReportId);
+      return;
+    }
 
     if (notif.relatedEntityId) {
       const targetTemplate = templates.find((t) => t.id === notif.relatedEntityId);
       if (targetTemplate) {
         if (targetTemplate.status === 'Approved') {
           openTemplateDetail(targetTemplate);
-        } else if (notif.type === 'approval_required' || notif.type === 'template_review_requested') {
+        } else if (notif.type === 'approval_required' || notif.type === 'template_review_requested' || notif.type === 'template_review_requested_delegated') {
           setActiveView('approvals');
         } else {
           setActiveView('my-requests');
         }
-      } else if (notif.type === 'approval_required' || notif.type === 'template_review_requested') {
+      } else if (notif.type === 'approval_required' || notif.type === 'template_review_requested' || notif.type === 'template_review_requested_delegated') {
         setActiveView('approvals');
       } else {
         setActiveView('my-requests');
@@ -130,10 +159,11 @@ export const NotificationsPage: React.FC = () => {
   };
 
   const renderNotificationItem = (notif: Notification) => (
-    <div
+    <button
+      type="button"
       key={notif.id}
-      onClick={() => handleNotificationClick(notif)}
-      className={`p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-3.5 group ${
+      onClick={() => void handleNotificationClick(notif)}
+      className={`w-full p-4 text-left rounded-xl border transition-all cursor-pointer flex items-start gap-3.5 group focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
         notif.read
           ? 'bg-white border-slate-200/80 hover:bg-slate-50'
           : 'bg-indigo-50/40 border-indigo-200/90 shadow-2xs hover:bg-indigo-50/70'
@@ -159,7 +189,7 @@ export const NotificationsPage: React.FC = () => {
       {!notif.read && (
         <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0 self-center" title="Unread" />
       )}
-    </div>
+    </button>
   );
 
   const tabs: NotificationTab[] = ['All', 'Unread', 'Templates', 'Reports', 'Comments'];

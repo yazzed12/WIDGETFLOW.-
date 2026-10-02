@@ -46,7 +46,15 @@ async function safe<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+async function safeAccess<T>(operation: () => Promise<T>, message: string): Promise<T> {
+  try { return await operation(); } catch { throw new Error(message); }
+}
+
 export const adminService = {
+  featureRoleAccess: (search: string, limit: number, offset: number) => safeAccess(() => adminReadRepository.featureRoleAccess(search, limit, offset), "We couldn't load Role access. Please try again."),
+  featureUserAccess: (search: string, limit: number, offset: number) => safeAccess(() => adminReadRepository.featureUserAccess(search, limit, offset), "We couldn't load User access. Please try again."),
+  setFeatureRoleAccess: (roleId: string, allowed: boolean) => safeAccess(() => adminMutationRepository.setFeatureRoleAccess(roleId, allowed), "We couldn't update Insights access for this Role."),
+  setFeatureUserOverride: (userId: string, override: 'inherit' | 'allow' | 'deny') => safeAccess(() => adminMutationRepository.setFeatureUserOverride(userId, override), "We couldn't update Insights access for this user."),
   overview: () => safe(() => adminReadRepository.overview()),
   users: () => safe(() => adminReadRepository.users()),
   roleCatalog: () => safe(() => adminReadRepository.roleCatalog()),

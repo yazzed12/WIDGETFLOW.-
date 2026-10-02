@@ -1,11 +1,13 @@
 export type AppErrorCode = 'INVALID_EMAIL' | 'INVALID_PASSWORD' | 'INVALID_INPUT' | 'EMAIL_ALREADY_EXISTS' | 'FILE_TYPE_NOT_SUPPORTED' | 'FILE_TOO_LARGE' | 'UNAUTHORIZED' | 'SESSION_EXPIRED' | 'FORBIDDEN' | 'NOT_FOUND' | 'NETWORK_ERROR' | 'INTERNAL_ERROR' | 'SIGNATURE_CONFIGURATION_REQUIRED' | 'SIGNATURE_CONFIGURATION_FIXED' | 'SIGNATURE_REQUIRED_ROLE_NOT_FOUND' | 'SIGNATURE_REQUIRED_ROLE_INVALID' | 'SIGNATURE_REQUIRED_ROLE_MISMATCH' | 'SIGNATURE_FIELD_NOT_FOUND' | 'SIGNATURE_ROLE_IMMUTABLE' | 'REPORT_SIGNATURE_CONFIGURATION_NOT_EDITABLE' | 'UNKNOWN';
 
+import { isAuthenticationFailure } from '../../features/workspace/workspaceRequestControl';
+
 export class AppError extends Error {
   readonly code: AppErrorCode;
   readonly field?: string;
   readonly fieldKey?: string;
-  readonly context?: 'send' | 'sign' | 'complete';
-  constructor(code: AppErrorCode, message: string, field?: string, fieldKey?: string, context?: 'send' | 'sign' | 'complete') {
+  readonly context?: 'send' | 'sign' | 'complete' | 'return' | 'reject';
+  constructor(code: AppErrorCode, message: string, field?: string, fieldKey?: string, context?: 'send' | 'sign' | 'complete' | 'return' | 'reject') {
     super(message);
     this.name = 'AppError';
     this.code = code;
@@ -15,13 +17,14 @@ export class AppError extends Error {
   }
 }
 
-export function normalizeError(error: unknown, context?: 'send' | 'sign' | 'complete'): AppError {
+export function normalizeError(error: unknown, context?: 'send' | 'sign' | 'complete' | 'return' | 'reject'): AppError {
   if (error instanceof AppError) {
     // Normalization is intentionally idempotent. Context layers may rethrow a
     // domain error, but must not discard its field association or safe copy.
     if (!context || error.context === context) return error;
     return new AppError(error.code, error.message, error.field, error.fieldKey, context);
   }
+  if (isAuthenticationFailure(error)) return new AppError('SESSION_EXPIRED', 'Your session has expired. Please sign in again.', undefined, undefined, context);
   const source = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown } | null;
   const code = String(source?.code ?? '').toUpperCase();
   const message = [source?.message, source?.details, source?.hint].filter(Boolean).map(String).join(' | ');
@@ -43,16 +46,35 @@ export function normalizeError(error: unknown, context?: 'send' | 'sign' | 'comp
   if (code === 'INVALID_PASSWORD' || lower.includes('password must be between')) return new AppError('INVALID_PASSWORD', 'Password must be between 12 and 128 characters.', 'password');
   if (code === 'UNAUTHORIZED' || code === 'UNAUTHENTICATED' || code === 'AUTHENTICATION_REQUIRED') return new AppError('UNAUTHORIZED', 'Please sign in to continue.');
   if (code === 'SESSION_EXPIRED') return new AppError('SESSION_EXPIRED', 'Your session has expired. Please sign in again.');
-  if (code === 'FORBIDDEN' || code === 'PERMISSION_DENIED') return new AppError('FORBIDDEN', "You don't have permission to perform this action.");
+  if (code === 'FORBIDDEN' || code === 'PERMISSION_DENIED' || lower.includes('forbidden') || lower.includes('permission_denied')) return new AppError('FORBIDDEN', "You don't have permission to perform this action.");
   if (code === 'NETWORK_ERROR' || lower.includes('failed to fetch') || lower.includes('unable to reach')) return new AppError('NETWORK_ERROR', "We couldn't connect to the service. Check your connection and try again.");
   if (code === 'FILE_TOO_LARGE' || lower.includes('too large') || lower.includes('10 mib') || lower.includes('file size exceeds')) return new AppError('FILE_TOO_LARGE', 'This file is too large to upload.');
   if (code === 'FILE_TYPE_NOT_SUPPORTED' || lower.includes('unsupported file') || lower.includes('unsupported or missing file') || lower.includes('mime type')) return new AppError('FILE_TYPE_NOT_SUPPORTED', 'This file type is not supported.');
   if (code === 'ASSET_LINK_REQUIRED') return new AppError('INVALID_INPUT', 'Save the report before adding attachments.');
   if (code === 'RETURN_REASON_REQUIRED' || lower.includes('return_reason_required')) return new AppError('INVALID_INPUT', 'Please provide a reason for returning this item.');
   if (code === 'REJECTION_REASON_REQUIRED' || lower.includes('rejection_reason_required')) return new AppError('INVALID_INPUT', 'Please provide a reason for this action.');
-  if (code === 'REPORT_NOT_ACTIONABLE' || lower.includes('report_not_actionable')) return new AppError('FORBIDDEN', 'This report is no longer available for this action.');
+  if (code === 'REPORT_NOT_ACTIONABLE' || lower.includes('report_not_actionable') || code === 'ASSIGNMENT_NOT_ACTIONABLE' || lower.includes('assignment_not_actionable') || code === 'ALREADY_SIGNED' || lower.includes('already_signed')) {
+    const actionMessage = context === 'return'
+      ? 'This report can no longer be returned.'
+      : context === 'reject'
+        ? 'This report can no longer be rejected.'
+        : context === 'sign'
+          ? 'This report can no longer be signed.'
+          : 'This report can no longer be acted on.';
+    return new AppError('FORBIDDEN', actionMessage, undefined, undefined, context);
+  }
   if (code === 'ASSIGNMENT_NOT_OWNED' || lower.includes('assignment_not_owned') || code === 'SELF_RECIPIENT_ACTION_NOT_ALLOWED' || lower.includes('self_recipient_action_not_allowed')) return new AppError('FORBIDDEN', "You don't have permission to perform this action.");
-  if (code === 'SIGNATURE_ASSIGNMENT_REQUIRED' || lower.includes('signature_assignment_required')) return new AppError('FORBIDDEN', 'Only assigned signers can return this report.');
+  if (code === 'DELEGATION_CONTEXT_INVALID' || lower.includes('delegation_context_invalid') || code === 'DELEGATION_NOT_ACTIVE_OR_NOT_ASSIGNED' || lower.includes('delegation_not_active_or_not_assigned')) return new AppError('FORBIDDEN', 'Your delegated authority has ended.');
+  if (code === 'SIGNATURE_ASSIGNMENT_REQUIRED' || lower.includes('signature_assignment_required')) {
+    const actionMessage = context === 'return'
+      ? 'Only recipients assigned to sign this report can return it.'
+      : context === 'reject'
+        ? 'Only recipients assigned to sign this report can reject it.'
+        : context === 'sign'
+          ? 'You are not assigned to sign this report.'
+          : 'This report action requires a current signature assignment.';
+    return new AppError('FORBIDDEN', actionMessage, undefined, undefined, context);
+  }
   if (code === 'TEMPLATE_RETURN_NOT_ALLOWED' || lower.includes('template_return_not_allowed')) return new AppError('FORBIDDEN', "You don't have permission to return this template.");
   if (code === 'INVALID_INPUT') return new AppError('INVALID_INPUT', 'Please check the information entered and try again.');
   if (code === 'NOT_FOUND') return new AppError('NOT_FOUND', 'The requested item could not be found.');

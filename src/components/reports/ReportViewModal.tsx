@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ReportInstance } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { useSystemConfig } from '../../context/SystemConfigContext';
 import { ReportCommentThread } from './ReportCommentThread';
+import { UploadedReportModal } from './UploadedReportModal';
+import { UploadedReportDocument } from './UploadedReportDocument';
 import { DynamicTemplateRenderer } from '../dynamic-template/DynamicTemplateRenderer';
 import { normalizeReportTemplateSnapshot } from '../../shared/signatureResolver';
 import { formatDateTime } from '../../shared/dateTime';
+import { getOperationalReportAssignment, hasOperationalReportSignatureAssignment } from '../../features/delegations/operationalReportAssignment';
+import { getDelegatedSignatureSnapshot } from '../../features/reports/signatureProvenance';
+import { belongsToOperationalSubject } from '../../features/delegations/operationalWorkspaceFilters';
 import {
   X,
   FileText,
@@ -28,6 +33,7 @@ interface ReportViewModalProps {
 }
 
 export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClose }) => {
+  const [showUploadedDocumentModal, setShowUploadedDocumentModal] = useState(false);
   const {
     currentUser,
     templates,
@@ -36,26 +42,41 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
     openRejectReportModal,
     openSignReportModal,
     openFillReportModal,
+    openReportViewModal,
     markReportCompleted,
     hasPermission,
+    hasOperationalPermission,
+    operationalSubjectUserId,
+    isDelegatedMode,
+    authorityContext,
   } = useApp();
   const { isSettingEnabled } = useSystemConfig();
+
+  const isPersistedReport = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(report.id);
+  if (isPersistedReport && report.detailLoaded === false) {
+    return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="presentation">
+      <section role="status" aria-live="polite" className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 text-center shadow-xl">
+        <p className="text-sm font-semibold text-slate-800">Loading report details…</p>
+        <button type="button" onClick={onClose} className="mt-4 rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">Close</button>
+      </section>
+    </div>;
+  }
 
   const template = (report as any).templateSnapshot
     ? normalizeReportTemplateSnapshot((report as any).templateSnapshot)
     : templates.find((t) => t.id === report.templateId);
 
-  const isAuthor = report.createdById === currentUser.id;
+  const subjectId = operationalSubjectUserId ?? '';
+  const isAuthor = belongsToOperationalSubject(report, subjectId);
+  const isUploadedReport = report.sourceType === 'uploaded';
   const isSupabaseReport = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(report.id);
+  const operationalAssignment = isSupabaseReport ? getOperationalReportAssignment(report, subjectId) : null;
+  const hasSignatureMapping = isSupabaseReport && hasOperationalReportSignatureAssignment(report, operationalAssignment, subjectId);
   const isAssignedRecipient = isSupabaseReport
-    ? report.status === 'Sent' && !report.lockedAt && !!report.currentSendCycleId && !!report.assignments?.some((assignment) => assignment.recipientUserId === currentUser.id && assignment.sendCycleId === report.currentSendCycleId && assignment.assignmentStatus === 'pending' && report.signatureAssignments?.some((mapping) => mapping.reportAssignmentId === assignment.id && mapping.recipientUserId === currentUser.id && mapping.sendCycleId === report.currentSendCycleId))
-    : report.sentToId === currentUser.id;
-  const isMappedSigner = !!report.assignments?.some((assignment) =>
-    assignment.recipientUserId === currentUser.id
-    && assignment.sendCycleId === report.currentSendCycleId
-    && assignment.assignmentStatus === 'pending'
-    && report.signatureAssignments?.some((mapping) => mapping.reportAssignmentId === assignment.id && mapping.recipientUserId === currentUser.id && mapping.sendCycleId === report.currentSendCycleId)
-  );
+    ? report.status === 'Sent' && !report.lockedAt && !!report.currentSendCycleId && Boolean(operationalAssignment) && (isUploadedReport || hasSignatureMapping)
+    : report.sentToId === subjectId;
+  const isMappedSigner = isSupabaseReport ? hasSignatureMapping : isAssignedRecipient;
+  const canShowRecipientActions = !isDelegatedMode || (isSupabaseReport && !isUploadedReport);
 
   const components: any[] = [];
   if (template?.components) components.push(...template.components);
@@ -70,6 +91,8 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
     (c: any) => c.type === 'signature' && (c.signatureConfig?.signatureRole || '').toLowerCase() === 'sender'
   );
   const activeSenderSig = (report.activeSignatures || []).find((s: any) => s.signatureRole === 'sender');
+  const latestSignature = report.activeSignatures?.slice().sort((left, right) => Date.parse(left.signedAt) - Date.parse(right.signedAt)).at(-1) ?? report.signature;
+  const latestSignatureDelegation = getDelegatedSignatureSnapshot(latestSignature);
 
   const getFieldValueLabel = (fieldId: string) => {
     if (!template || !(template as any).fields) return fieldId;
@@ -85,7 +108,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
   };
 
   const getTimelineItems = () => {
-    const items: Array<{ id: string; personName: string; role: string; action: string; comment?: string; timestamp: string; rawTime: number }> = [];
+    const items: Array<{ id: string; personName: string; role: string; action: string; comment?: string; timestamp: string; rawTime: number; delegationId?: string | null; delegatedByName?: string | null; authorityRoleName?: string | null; delegationStartAt?: string | null; delegationEndAt?: string | null }> = [];
     const seenKeys = new Set<string>();
 
     if (report.auditHistory && Array.isArray(report.auditHistory)) {
@@ -106,6 +129,11 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
           comment: rec.comment,
           timestamp: formattedTime,
           rawTime: isNaN(timeMs) ? idx : timeMs,
+          delegationId: rec.delegationId,
+          delegatedByName: rec.delegatedByNameSnapshot,
+          authorityRoleName: rec.authorityRoleNameSnapshot,
+          delegationStartAt: rec.delegationStartAtSnapshot,
+          delegationEndAt: rec.delegationEndAtSnapshot,
         });
         seenKeys.add(key);
       });
@@ -132,6 +160,11 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
             comment: verId ? `Digital Signature Verification ID: ${verId}` : undefined,
             timestamp: formattedTime,
             rawTime: isNaN(timeMs) ? Date.now() + idx : timeMs,
+            delegationId: sig.delegationId,
+            delegatedByName: sig.delegatedByNameSnapshot,
+            authorityRoleName: sig.authorityRoleNameSnapshot,
+            delegationStartAt: sig.delegationStartAtSnapshot,
+            delegationEndAt: sig.delegationEndAtSnapshot,
           });
           seenKeys.add(key);
         }
@@ -205,9 +238,10 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                 {getStatusBadge(report.status)}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Template Used: <strong className="text-slate-800">{report.templateName}</strong> ({report.categoryName})
+                {isUploadedReport ? <><strong className="rounded bg-indigo-50 px-2 py-1 text-indigo-700">Uploaded Report</strong>{report.status === 'Completed' && <span className="ml-2 font-semibold text-emerald-700">Ready to Send</span>}</> : <>Template Used: <strong className="text-slate-800">{report.templateName}</strong>{report.categoryName ? ` (${report.categoryName})` : ''}</>}
               </p>
               {report.displayId && <p className="text-[11px] font-mono text-slate-400 mt-1">{report.displayId}</p>}
+              {isDelegatedMode && authorityContext?.delegation && <p className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[11px] text-indigo-900"><strong>{currentUser.name} — {currentUser.role}</strong><br />Acting as {authorityContext.authority.roleName} for {authorityContext.operationalSubject.fullName}</p>}
             </div>
           </div>
 
@@ -278,7 +312,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
           )}
 
           {/* Digital Signature Card if Signed */}
-          {report.status === 'Signed' && (report.signature || (report.activeSignatures && report.activeSignatures.length > 0)) && (
+          {report.status === 'Signed' && latestSignature && (
             <div className="p-5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-emerald-950 font-bold text-sm">
@@ -294,21 +328,22 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                 <div>
                   <span className="text-[10px] text-emerald-700 font-semibold block uppercase">Signed By</span>
                   <span className="font-bold text-emerald-950 mt-0.5 block">
-                    {report.signature?.signedByName || report.activeSignatures?.[0]?.signedByName || report.sentToName || 'Signer'} ({report.signature?.signedByRole || report.activeSignatures?.[0]?.signedByRole || 'Role'})
+                    {latestSignature.signedByName} ({latestSignature.signedByRole || 'Role'})
+                    {latestSignatureDelegation && <span className="block text-[10px] font-semibold text-indigo-700">Acting as {latestSignatureDelegation.authorityRoleName} for {latestSignatureDelegation.delegatedByName}</span>}
                   </span>
                 </div>
 
                 <div>
                   <span className="text-[10px] text-emerald-700 font-semibold block uppercase">Signed On</span>
                   <span className="font-medium text-emerald-900 mt-0.5 block">
-                    {formatDate(report.signature?.signedAt || report.activeSignatures?.[0]?.signedAt || report.updatedAt)}
+                    {formatDate(latestSignature.signedAt || report.updatedAt)}
                   </span>
                 </div>
 
                 <div>
                   <span className="text-[10px] text-emerald-700 font-semibold block uppercase">Verification ID</span>
                   <span className="font-mono font-bold text-emerald-800 mt-0.5 block bg-white px-2 py-0.5 rounded border border-emerald-200 w-fit text-[11px]">
-                    {report.signature?.verificationId || report.activeSignatures?.[0]?.verificationId || '—'}
+                    {latestSignature.verificationId || '—'}
                   </span>
                 </div>
               </div>
@@ -368,7 +403,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                   return (
                     <div key={assignment.id} className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
                       <div className="min-w-0"><div className="font-bold text-slate-900 truncate">{assignment.recipientName || 'Recipient'}</div><div className="text-[10px] text-slate-500">{assignment.recipientRoleName || assignment.recipientRoleKey || 'Role'}</div></div>
-                      <div className="text-right shrink-0"><div className={`font-bold ${signed ? 'text-emerald-700' : 'text-amber-700'}`}>{signed ? '✓ Digitally Signed' : (assignment.assignmentStatus || 'Pending')}</div>{signed && signature && <div className="text-[10px] text-slate-500">{signature.verificationId || 'Verified'}{signature.signedAt ? ` · ${new Date(signature.signedAt).toLocaleString()}` : ''}</div>}</div>
+                      <div className="text-right shrink-0"><div className={`font-bold ${signed ? 'text-emerald-700' : 'text-amber-700'}`}>{signed ? '✓ Digitally Signed' : (assignment.assignmentStatus || 'Pending')}</div>{signed && signature && <><div className="text-[10px] text-slate-600">Signed by {signature.signedByName} ({signature.signedByRole})</div>{signature.delegationId && signature.authorityRoleNameSnapshot && signature.delegatedByNameSnapshot && <div className="text-[10px] font-medium text-indigo-700">Acting as {signature.authorityRoleNameSnapshot} for {signature.delegatedByNameSnapshot}</div>}<div className="text-[10px] text-slate-500">{signature.verificationId || 'Verified'}{signature.signedAt ? ` · ${new Date(signature.signedAt).toLocaleString()}` : ''}</div></>}</div>
                     </div>
                   );
                 })}
@@ -376,8 +411,13 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
             </div>
           )}
 
+          {isUploadedReport && <div className="space-y-3">
+            {report.returnedAt && report.returnReason && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800"><strong>Returned for correction</strong><p className="mt-1">{report.returnReason}</p></div>}
+            <UploadedReportDocument versions={report.documentVersions ?? []} currentDocumentVersionId={report.currentDocumentVersionId} currentSendCycleId={report.currentSendCycleId} sendCycles={report.sendCycles} recipientView={!isAuthor && report.status === 'Sent'} />
+          </div>}
+
           {/* Dynamic Template Structure / Values */}
-          <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/50 space-y-4">
+          {!isUploadedReport && <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/50 space-y-4">
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 border-b border-slate-200 pb-2">
               Report Content &amp; Data Fields
             </h3>
@@ -409,10 +449,10 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Audit History Timeline */}
-          {hasPermission('audit_history.view') && (
+          {hasOperationalPermission('audit_history.view') && (
             <div className="space-y-3 pt-4 border-t border-slate-200">
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-indigo-600" />
@@ -427,6 +467,8 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                       <div className="font-bold text-slate-900">
                         {record.personName} <span className="text-slate-500 font-normal">({record.role})</span>
                       </div>
+                      {record.delegationId && record.delegatedByName && <div className="text-[11px] font-medium text-indigo-700">Acting as {record.authorityRoleName || 'delegated authority'} for {record.delegatedByName}</div>}
+                      {record.delegationId && (record.delegationStartAt || record.delegationEndAt) && <div className="text-[10px] text-slate-500">Delegated authority{record.delegationStartAt ? ` · ${formatDate(record.delegationStartAt)}` : ''}{record.delegationEndAt ? ` → ${formatDate(record.delegationEndAt)}` : ''}</div>}
                       <div className="text-indigo-700 font-semibold">{record.action}</div>
                       {record.comment && (
                         <p className="text-slate-600 italic text-[11px] bg-slate-50 p-2 rounded border border-slate-100 font-medium">
@@ -446,10 +488,10 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
           )}
 
           {/* Report Comments Thread */}
-          <div className="border border-slate-200 rounded-2xl p-5 bg-white space-y-3">
+          {!isDelegatedMode && <div className="border border-slate-200 rounded-2xl p-5 bg-white space-y-3">
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Activity &amp; Review Comments</h3>
             <ReportCommentThread reportId={report.id} />
-          </div>
+          </div>}
         </div>
 
         {/* Footer Actions */}
@@ -465,7 +507,10 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
             {/* Author Actions */}
             {isAuthor && report.status !== 'Signed' && report.status !== 'Rejected' && (
               <>
-                {(report.status === 'Draft' || report.status === 'Returned') && template && hasPermission('reports.edit_draft') && (
+                {!isDelegatedMode && isUploadedReport && report.status === 'Draft' && (hasPermission('reports.edit_draft') || hasPermission('reports.create')) && (
+                  <button onClick={() => setShowUploadedDocumentModal(true)} className="px-3.5 py-2 rounded-lg bg-indigo-600 text-xs font-semibold text-white"><FileCheck className="mr-1.5 inline h-3.5 w-3.5" />{report.returnedAt ? 'Upload Corrected Report' : report.currentDocumentVersionId ? 'Upload New Version' : 'Upload Report File'}</button>
+                )}
+                {!isUploadedReport && (report.status === 'Draft' || report.status === 'Returned') && template && hasOperationalPermission('reports.edit_draft') && (
                   <button
                     onClick={() => {
                       onClose();
@@ -478,7 +523,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                   </button>
                 )}
 
-                {report.status === 'Draft' && hasPermission('reports.complete') && (
+                {!isUploadedReport && report.status === 'Draft' && hasOperationalPermission('reports.complete') && (
                   <button
                     onClick={() => markReportCompleted(report.id)}
                     className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -488,7 +533,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                   </button>
                 )}
 
-                {(report.status === 'Completed' || report.status === 'Returned') && hasPermission('reports.send') && (
+                {!isUploadedReport && (report.status === 'Completed' || report.status === 'Returned') && hasOperationalPermission('reports.send') && (
                   <button
                     onClick={() => {
                       onClose();
@@ -504,9 +549,9 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
             )}
 
             {/* Recipient Actions */}
-            {isAssignedRecipient && report.status === 'Sent' && (
+            {canShowRecipientActions && isAssignedRecipient && report.status === 'Sent' && (
               <>
-                {isSettingEnabled('allow_rejection') && isSettingEnabled('workflow.report_rejection') && hasPermission('reports.reject') && (
+                {!isUploadedReport && isSettingEnabled('allow_rejection') && isSettingEnabled('workflow.report_rejection') && hasOperationalPermission('reports.reject') && (
                   <button
                     onClick={() => {
                       onClose();
@@ -519,7 +564,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                   </button>
                 )}
 
-                {isSettingEnabled('allow_return') && isSettingEnabled('workflow.return_for_changes') && hasPermission('reports.return') && (
+                {isSettingEnabled('allow_return') && isSettingEnabled('workflow.return_for_changes') && hasOperationalPermission('reports.return') && (
                   <button
                     onClick={() => {
                       onClose();
@@ -532,13 +577,13 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
                   </button>
                 )}
 
-                {isMappedSigner && (hasSenderSigRequirement && !activeSenderSig ? (
+                {!isUploadedReport && isMappedSigner && (hasSenderSigRequirement && !activeSenderSig ? (
                   <div className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-1.5 text-amber-900 text-[11px] font-semibold">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                     <span>Sender signature required before sign-off</span>
                   </div>
                 ) : (
-                  isSettingEnabled('digital_signature') && isSettingEnabled('workflow.digital_signature') && hasPermission('reports.sign') && (
+                  isSettingEnabled('digital_signature') && isSettingEnabled('workflow.digital_signature') && hasOperationalPermission('reports.sign') && (
                     <button
                       onClick={() => {
                         onClose();
@@ -556,6 +601,7 @@ export const ReportViewModal: React.FC<ReportViewModalProps> = ({ report, onClos
           </div>
         </div>
       </div>
+      {!isDelegatedMode && showUploadedDocumentModal && isUploadedReport && <UploadedReportModal existingReport={report} onClose={() => { setShowUploadedDocumentModal(false); openReportViewModal(report); }} />}
     </div>
   );
 };

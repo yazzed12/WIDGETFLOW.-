@@ -2,12 +2,113 @@ import type {
   Notification,
   ReportAssignment,
   ReportInstance,
+  ReportAuditRecord,
   ReportStatus,
 } from '../../types';
 
 import { reportRepository } from './reportRepository';
 
 import { normalizeReportTemplateSnapshot } from '../../shared/signatureResolver';
+
+const firstRowValue = (row: Record<string, any>, ...keys: string[]) => keys
+  .map((key) => row[key])
+  .find((value) => value !== undefined && value !== null);
+
+const nullableRowText = (row: Record<string, any>, ...keys: string[]) => {
+  const value = firstRowValue(row, ...keys);
+  return typeof value === 'string' && value.length ? value : null;
+};
+
+function mapDelegatedProvenance(row: Record<string, any>) {
+  return {
+    delegationId: nullableRowText(row, 'delegation_id', 'delegationId'),
+    delegatedByUserId: nullableRowText(row, 'delegated_by_user_id', 'delegatedByUserId'),
+    delegatedByNameSnapshot: nullableRowText(row, 'delegated_by_name_snapshot', 'delegated_by_name', 'delegatedByNameSnapshot', 'delegatedByName'),
+    authorityRoleId: nullableRowText(row, 'authority_role_id', 'authorityRoleId'),
+    authorityRoleKeySnapshot: nullableRowText(row, 'authority_role_key_snapshot', 'authority_role_key', 'authorityRoleKeySnapshot', 'authorityRoleKey'),
+    authorityRoleNameSnapshot: nullableRowText(row, 'authority_role_name_snapshot', 'authority_role_name', 'authorityRoleNameSnapshot', 'authorityRoleName'),
+    authorityGovernanceLevelSnapshot: nullableRowText(row, 'authority_governance_level_snapshot', 'authority_governance_level', 'authorityGovernanceLevelSnapshot', 'authorityGovernanceLevel'),
+    delegationStartAtSnapshot: nullableRowText(row, 'delegation_start_at_snapshot', 'delegation_start_snapshot', 'delegationStartAtSnapshot'),
+    delegationEndAtSnapshot: nullableRowText(row, 'delegation_end_at_snapshot', 'delegation_end_snapshot', 'delegationEndAtSnapshot'),
+  };
+}
+
+export function mapReportSignatureEvent(row: Record<string, any>, reportId = String(row.report_id ?? '')) {
+  return {
+    id: row.id,
+    reportId,
+    reportAssignmentId: row.report_assignment_id,
+    sendCycleId: row.send_cycle_id,
+    componentId: row.component_id,
+    componentKey: row.component_key,
+    signedByUserId: String(firstRowValue(row, 'signer_user_id', 'signed_by_user_id') ?? ''),
+    signedByName: String(firstRowValue(row, 'signer_name', 'signed_by_name') ?? 'Unknown user'),
+    signedByRole: String(firstRowValue(row, 'signer_role_name', 'signer_role_name_snapshot', 'signed_by_role') ?? 'Role'),
+    signedByRoleId: nullableRowText(row, 'signer_role_id', 'signer_role_id_snapshot', 'signed_by_role_id') ?? undefined,
+    signedByRoleKey: nullableRowText(row, 'signer_role_key', 'signer_role_key_snapshot', 'signed_by_role_key') ?? undefined,
+    signedByGovernanceLevel: nullableRowText(row, 'signer_governance_level', 'signer_governance_level_snapshot', 'signed_by_governance_level'),
+    signatureRole: String(row.signature_role ?? 'receiver').toLowerCase() as 'sender' | 'receiver',
+    signatureMethod: String(row.signature_method ?? 'typed').toLowerCase() as 'uploaded' | 'drawn' | 'typed',
+    verificationId: String(row.verification_id ?? ''),
+    signedContentHash: row.signed_content_hash ?? undefined,
+    signedAt: String(firstRowValue(row, 'occurred_at', 'signed_at', 'created_at') ?? ''),
+    isActive: String(row.event_type ?? 'signed').toLowerCase() === 'signed',
+    ...mapDelegatedProvenance(row),
+  };
+}
+
+const reportAuditAction = (eventType: unknown): ReportAuditRecord['action'] => {
+  const actions: Record<string, string> = {
+    REPORT_DRAFT_SAVED: 'Saved Draft',
+    REPORT_COMPLETED: 'Completed',
+    REPORT_SENT: 'Sent',
+    REPORT_RETURNED: 'Returned',
+    REPORT_REJECTED: 'Rejected',
+    REPORT_SIGNED: 'Signed',
+    REPORT_FULLY_SIGNED: 'Fully Signed',
+    REPORT_COMMENT_ADDED: 'Commented',
+  };
+  return (actions[String(eventType ?? '').toUpperCase()] ?? 'Created') as ReportAuditRecord['action'];
+};
+
+export function mapReportAuditEvent(row: Record<string, any>, reportId = String(row.report_id ?? '')) {
+  return {
+    id: row.id,
+    reportId,
+    personName: String(firstRowValue(row, 'actor_name', 'actor_name_snapshot') ?? 'Unknown user'),
+    role: String(firstRowValue(row, 'actor_role_name', 'actor_role_name_snapshot') ?? 'Role'),
+    actorUserId: nullableRowText(row, 'actor_user_id', 'actorUserId'),
+    actorRoleId: nullableRowText(row, 'actor_role_id', 'actor_role_id_snapshot', 'actorRoleId'),
+    actorRoleKey: nullableRowText(row, 'actor_role_key', 'actor_role_key_snapshot', 'actorRoleKey'),
+    actorGovernanceLevel: nullableRowText(row, 'actor_governance_level', 'actor_governance_level_snapshot', 'actorGovernanceLevel'),
+    action: reportAuditAction(row.event_type),
+    timestamp: String(firstRowValue(row, 'occurred_at', 'created_at') ?? ''),
+    comment: row.comment ?? row.reason ?? undefined,
+    ...mapDelegatedProvenance(row),
+  };
+}
+
+export function mapReportNotificationRow(row: Record<string, any>): Notification {
+  const type = String(row.notification_type ?? '').toLowerCase() as Notification['type'];
+  const delegated = type === 'report_received_delegated';
+  return {
+    id: String(row.id ?? ''),
+    userId: String(row.recipient_user_id ?? ''),
+    title: delegated ? 'New report requires your attention' : type === 'template_review_requested_delegated' ? 'Template requires your delegated review' : String(row.title ?? ''),
+    message: String(row.message ?? ''),
+    type,
+    read: Boolean(row.is_read),
+    readAt: row.read_at ?? undefined,
+    timestamp: String(row.created_at ?? ''),
+    relatedEntityId: row.related_template_id ?? undefined,
+    relatedTemplateId: row.related_template_id ?? undefined,
+    relatedReportId: row.related_report_id ?? undefined,
+    sendCycleId: row.send_cycle_id ?? undefined,
+    reportAssignmentId: row.report_assignment_id ?? undefined,
+    originalRecipientUserId: nullableRowText(row, 'original_recipient_user_id', 'originalRecipientUserId'),
+    ...mapDelegatedProvenance(row),
+  };
+}
 
 const statusMap: Record<string, ReportStatus> = {
   draft: 'Draft',
@@ -18,7 +119,8 @@ const statusMap: Record<string, ReportStatus> = {
   rejected: 'Rejected',
 };
 
-export function mapReportRow(row: any): ReportInstance {
+export function mapReportRow(row: any, detailLoaded = false): ReportInstance {
+  const sourceType: ReportInstance['sourceType'] = row.source_type === 'uploaded' ? 'uploaded' : 'template';
   const values = (row.report_values ?? []).reduce(
     (acc: Record<string, any>, v: any) => {
       acc[v.field_key] = v.value;
@@ -50,33 +152,16 @@ export function mapReportRow(row: any): ReportInstance {
     : row.template_versions;
 
   const snapshot = versionRow?.schema_snapshot ?? {};
+  const templateSnapshot = sourceType === 'template'
+    ? normalizeReportTemplateSnapshot({
+        ...snapshot,
+        id: row.template_id,
+        name: row.template_name_snapshot,
+        version: row.template_version_snapshot,
+      })
+    : undefined;
 
-  const templateSnapshot = normalizeReportTemplateSnapshot({
-    ...snapshot,
-    id: row.template_id,
-    name: row.template_name_snapshot,
-    version: row.template_version_snapshot,
-  });
-
-  const signatureEvents = (row.report_signature_events ?? []).map(
-    (s: any) => ({
-      id: s.id,
-      reportId: row.id,
-      reportAssignmentId: s.report_assignment_id,
-      sendCycleId: s.send_cycle_id,
-      componentId: s.component_id,
-      componentKey: s.component_key,
-      signerUserId: s.signer_user_id,
-      signedByName: s.signer_name,
-      signedByRole: s.signer_role_name,
-      signerRole: s.signature_role,
-      signatureMethod: s.signature_method,
-      verificationId: s.verification_id,
-      signedContentHash: s.signed_content_hash,
-      signedAt: s.occurred_at,
-      isActive: s.event_type === 'signed',
-    })
-  );
+  const signatureEvents = (row.report_signature_events ?? []).map((s: any) => mapReportSignatureEvent(s, row.id));
 
   const signatureAssignments = (
     row.report_signature_assignments ?? []
@@ -104,17 +189,42 @@ export function mapReportRow(row: any): ReportInstance {
     inherited: false,
   }));
 
+  const documentVersions = (row.report_document_versions ?? []).map((version: any) => ({
+    id: version.id,
+    reportId: version.report_id ?? row.id,
+    assetId: version.asset_id ?? version.asset_metadata_id ?? version.document_asset_id ?? '',
+    versionNumber: Number(version.version_number ?? version.document_version_number ?? version.version ?? 0),
+    filename: version.original_filename ?? version.filename ?? version.file_name ?? '',
+    mimeType: version.mime_type ?? version.content_type ?? '',
+    byteSize: Number(version.byte_size ?? version.file_size ?? 0) || undefined,
+    createdAt: version.created_at ?? version.uploaded_at,
+  }));
+
+  const sendCycles = (row.report_send_cycles ?? []).map((cycle: any) => ({
+    id: cycle.id,
+    cycleNumber: Number(cycle.cycle_number ?? 0),
+    documentVersionId: cycle.report_document_version_id ?? null,
+    status: cycle.status,
+    sentAt: cycle.sent_at,
+  }));
+
   return {
     id: row.id,
+    detailLoaded,
     displayId: row.report_display_id ?? undefined,
-    templateId: row.template_id,
-    templateVersionId: row.template_version_id,
-    templateName: row.template_name_snapshot,
-    templateVersion: row.template_version_snapshot,
+    sourceType,
+    templateId: sourceType === 'template' ? row.template_id : null,
+    templateVersionId: sourceType === 'template' ? row.template_version_id : null,
+    templateName: sourceType === 'template' ? row.template_name_snapshot : null,
+    templateVersion: sourceType === 'template' ? row.template_version_snapshot : undefined,
+    currentDocumentVersionId: row.current_document_version_id ?? null,
+    documentVersions,
+    sendCycles,
     title: row.title,
-    categoryId: row.category_id,
-    categoryName: row.category_name_snapshot,
+    categoryId: row.category_id ?? null,
+    categoryName: row.category_name_snapshot ?? null,
     createdById: row.created_by_user_id,
+    operationalSubjectUserId: row.operational_subject_user_id,
     createdByName: row.creator_name,
     createdByRole: row.creator_role_name,
     status: statusMap[row.status] ?? 'Draft',
@@ -138,24 +248,7 @@ export function mapReportRow(row: any): ReportInstance {
     templateSnapshot,
     activeSignatures: signatureEvents.filter((s: any) => s.isActive),
     signatureHistory: signatureEvents,
-    auditHistory: (row.report_audit_events ?? []).map((e: any) => ({
-      id: e.id,
-      reportId: row.id,
-      personName: e.actor_name,
-      role: e.actor_role_name,
-      action:
-        e.event_type === 'REPORT_DRAFT_SAVED'
-          ? 'Saved Draft'
-          : e.event_type === 'REPORT_COMPLETED'
-            ? 'Completed'
-            : e.event_type === 'REPORT_SENT'
-              ? 'Sent'
-              : e.event_type === 'REPORT_RETURNED'
-                ? 'Returned'
-                : 'Created',
-      timestamp: e.occurred_at,
-      comment: e.comment,
-    })),
+    auditHistory: (row.report_audit_events ?? []).map((event: any) => mapReportAuditEvent(event, row.id)),
   };
 }
 
@@ -210,11 +303,11 @@ export const reportService = {
   },
 
   async list() {
-    return (await reportRepository.list()).map(mapReportRow);
+    return (await reportRepository.list()).map((row) => mapReportRow(row));
   },
 
   async get(id: string) {
-    return mapReportRow(await reportRepository.get(id));
+    return mapReportRow(await reportRepository.get(id), true);
   },
 
   async create(
@@ -225,6 +318,23 @@ export const reportService = {
     return mapReportRow(
       await reportRepository.create(templateId, values, title)
     );
+  },
+
+  async createUploaded(title: string) {
+    const result = await reportRepository.createUploaded(title);
+    return mapReportRow(result.report ?? result);
+  },
+
+  async attachUploadedDocument(reportId: string, assetId: string) {
+    return reportRepository.attachUploadedDocument(reportId, assetId);
+  },
+
+  async sendUploaded(id: string, recipientIds: string[], note?: string) {
+    return reportRepository.sendUploaded(id, recipientIds, note);
+  },
+
+  async returnUploaded(id: string, assignmentId: string, reason: string) {
+    return reportRepository.returnUploadedReport(id, assignmentId, reason);
   },
 
   async saveDraft(
@@ -321,21 +431,7 @@ export const reportService = {
   ): Promise<Notification[]> {
     return (
       await reportRepository.listNotifications(userId)
-    ).map((n: any) => ({
-      id: n.id,
-      userId: n.recipient_user_id,
-      title: n.title,
-      message: n.message,
-      type: String(n.notification_type).toLowerCase() as Notification['type'],
-      read: n.is_read,
-      readAt: n.read_at,
-      timestamp: n.created_at,
-      relatedEntityId: n.related_template_id,
-      relatedTemplateId: n.related_template_id,
-      relatedReportId: n.related_report_id,
-      sendCycleId: n.send_cycle_id,
-      reportAssignmentId: n.report_assignment_id,
-    }));
+    ).map(mapReportNotificationRow);
   },
   async markNotificationRead(notificationId: string, userId: string): Promise<Notification[]> {
     await reportRepository.markMyNotificationRead(notificationId);

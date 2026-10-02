@@ -35,6 +35,10 @@ async function rpc(functionName: string, args: RpcArgs): Promise<unknown> {
 }
 
 export const adminMutationRepository = {
+  setFeatureRoleAccess: (roleId: string, allowed: boolean) =>
+    rpc('admin_set_feature_role_access', { p_feature_key: 'insights', p_role_id: roleId, p_allowed: allowed }),
+  setFeatureUserOverride: (userId: string, override: 'inherit' | 'allow' | 'deny') =>
+    rpc('admin_set_feature_user_override', { p_feature_key: 'insights', p_user_id: userId, p_override: override }),
   createUser: (body: Record<string, unknown>) => invoke('admin-create-user', body),
   createAdmin: (body: Record<string, unknown>) => invoke('admin-create-admin', body),
   resetPassword: (targetUserId: string, newPassword: string) => invoke('admin-reset-password', { targetUserId, newPassword }),

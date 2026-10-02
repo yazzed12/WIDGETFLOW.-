@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { useSystemConfig } from '../context/SystemConfigContext';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { QuickActions } from '../components/dashboard/QuickActions';
+import { buildDashboardQuickActions } from '../components/dashboard/quickActionModel';
 import {
   Library,
   Clock,
@@ -17,16 +19,27 @@ import {
   FileSpreadsheet,
   Shield,
   XCircle,
+  RotateCcw,
   Eye,
-  Plus,
   FileText,
-  StickyNote,
 } from 'lucide-react';
 import { WorkflowMonitor } from '../components/dashboard/WorkflowMonitor';
+import { belongsToOperationalSubject, isOperationallyRelevantReport } from '../features/delegations/operationalWorkspaceFilters';
+import { getOperationalReportAssignment, hasOperationalReportSignatureAssignment } from '../features/delegations/operationalReportAssignment';
+import { canCreateTemplateBackedReport } from '../features/delegations/effectiveAuthority';
+import { selectTemplateFromLibrary } from '../features/templates/templateSelection';
 
 export const DashboardPage: React.FC = () => {
+  const { isSettingEnabled } = useSystemConfig();
   const {
     currentUser,
+    authorityContext,
+    operationalSubject,
+    operationalSubjectUserId,
+    isDelegatedMode,
+    operationalWorkspaceLoading,
+    activityTimelineWasLoaded,
+    markActivityTimelineLoaded,
     getApprovedTemplates,
     getMyRequestsForUser,
     getPendingApprovalsForUser,
@@ -35,33 +48,82 @@ export const DashboardPage: React.FC = () => {
     templates,
     reports,
     setActiveView,
+    setSelectedCategory,
     openFillReportModal,
     openReportViewModal,
     openSignReportModal,
     openRejectReportModal,
+    openReturnReportModal,
     openAddTemplateModal,
     openTemplateDetail,
     openApprovalDetail,
-    hasPermission,
+    hasOperationalPermission,
+    getReportDetail,
+    hasTemplateApprovalPermission,
   } = useApp();
+
+  const subject = operationalSubject;
+  const workspaceSubjectId = operationalSubjectUserId ?? '';
+  const canUseApprovedTemplate = canCreateTemplateBackedReport(hasOperationalPermission);
 
   const approvedTemplates = getApprovedTemplates();
   const recentTemplates = [...approvedTemplates]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 4);
 
-  const myReports = reports.filter((r) => r.createdById === currentUser.id);
+  const myReports = reports.filter((r) => belongsToOperationalSubject(r, workspaceSubjectId));
   const myTemplateRequests = getMyRequestsForUser();
   const reportsAwaitingMyReview = getReportsAwaitingMyReview();
   const pendingTemplateApprovals = getPendingApprovalsForUser();
   const unreadNotifications = notifications.filter((n) => n.userId === currentUser.id && !n.read);
+  const browseReportTemplates = () => {
+    setSelectedCategory(null);
+    setActiveView('templates');
+  };
+  const quickActions = buildDashboardQuickActions({
+    hasOperationalPermission,
+    hasTemplateApprovalPermission,
+    isDelegatedMode,
+    myRequestsCount: myTemplateRequests.length,
+    pendingApprovalsCount: pendingTemplateApprovals.length,
+    onCreateTemplate: () => openAddTemplateModal(),
+    onCreateReport: () => canUseApprovedTemplate ? browseReportTemplates() : setActiveView('reports'),
+    onMyRequests: () => setActiveView('my-requests'),
+    onApprovals: () => setActiveView('approvals'),
+    onStickyNotes: () => setActiveView('sticky-notes'),
+  });
+
+  // Temporary manual-QA trace of the actual rendered consumer, not a pre-render
+  // snapshot. A serialized dependency avoids logging on unrelated rerenders.
+  const delegatedRuntimeTrace = import.meta.env.DEV && isDelegatedMode && authorityContext
+    ? JSON.stringify({
+      actor: authorityContext.actor,
+      authorityRole: {
+        id: authorityContext.authority.roleId,
+        name: authorityContext.authority.roleName,
+      },
+      operationalSubject,
+      effectivePermissions: authorityContext.authority.effectivePermissions ?? null,
+      effectivePermissionCount: authorityContext.authority.effectivePermissions?.length ?? null,
+      canCreateReport: hasOperationalPermission('reports.create'),
+      canCreateTemplate: hasOperationalPermission('templates.create'),
+      canUseTemplate: canUseApprovedTemplate,
+      quickActionsMounted: quickActions.some((action) => action.visible),
+      quickActionIds: quickActions.filter((action) => action.visible).map((action) => action.id),
+      requiredPermissionChecks: Object.fromEntries([
+        'reports.create', 'templates.create', 'templates.use', 'templates.view_approved', 'reports.view_own',
+      ].map((key) => [key, authorityContext.authority.effectivePermissions?.includes(key) ?? false])),
+    }) : null;
+  useEffect(() => {
+    if (delegatedRuntimeTrace) console.info('[WidgetFlow delegated runtime]', JSON.parse(delegatedRuntimeTrace));
+  }, [delegatedRuntimeTrace]);
 
   const returnedReports = reports.filter(
-    (r) => r.createdById === currentUser.id && r.status === 'Returned'
+    (r) => belongsToOperationalSubject(r, workspaceSubjectId) && (r.status === 'Returned' || (r.sourceType === 'uploaded' && Boolean(r.returnedAt)))
   );
 
   const userRelevantReports = reports
-    .filter((r) => r.createdById === currentUser.id || r.assignments?.some((a) => a.recipientUserId === currentUser.id) || r.sentToId === currentUser.id)
+    .filter((r) => isOperationallyRelevantReport(r, workspaceSubjectId))
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 5);
 
@@ -112,7 +174,7 @@ export const DashboardPage: React.FC = () => {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setActiveView('templates')}
+            onClick={browseReportTemplates}
             className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <span>Browse Report Templates</span>
@@ -120,6 +182,10 @@ export const DashboardPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {isDelegatedMode && subject && <div role="status" className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-xs text-indigo-900">
+        <span className="font-semibold">Viewing {subject.fullName}’s operational workspace.</span> Acting as {authorityContext?.authority.roleName}; your signed-in identity remains {currentUser.name} ({currentUser.role}).
+      </div>}
 
       {/* 5 Summary Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -219,7 +285,7 @@ export const DashboardPage: React.FC = () => {
           <div className="mt-3">
             <div className="text-2xl font-bold text-slate-900">{pendingTemplateApprovals.length}</div>
             <div className="text-[11px] font-medium mt-1">
-              {!hasPermission('template_approvals.view') ? (
+              {!hasTemplateApprovalPermission('template_approvals.view') ? (
                 <span className="text-slate-400">Template requests</span>
               ) : pendingTemplateApprovals.length > 0 ? (
                 <span className="text-amber-700 font-semibold">Requires template review</span>
@@ -231,47 +297,7 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      <QuickActions
-        actions={[
-          {
-            title: 'Create New Template',
-            description: 'Start a template in the existing builder.',
-            icon: Plus,
-            onClick: () => openAddTemplateModal(),
-            visible: hasPermission('templates.create') && hasPermission('studio.access'),
-          },
-          {
-            title: 'Create Report',
-            description: 'Choose an approved template and fill a report.',
-            icon: FileSpreadsheet,
-            onClick: () => setActiveView('templates'),
-            visible: hasPermission('templates.use') && hasPermission('reports.create'),
-          },
-          {
-            title: 'My Requests',
-            description: 'Track templates submitted for approval.',
-            icon: FileText,
-            onClick: () => setActiveView('my-requests'),
-            visible: hasPermission('templates.create') || hasPermission('templates.edit_own_draft'),
-            badge: myTemplateRequests.length > 0 ? `${myTemplateRequests.length} pending` : undefined,
-          },
-          {
-            title: 'Approvals',
-            description: 'Open the template approval inbox.',
-            icon: Clock,
-            onClick: () => setActiveView('approvals'),
-            visible: hasPermission('template_approvals.view'),
-            badge: pendingTemplateApprovals.length > 0 ? `${pendingTemplateApprovals.length} pending` : undefined,
-          },
-          {
-            title: 'Sticky Notes',
-            description: 'Capture a quick personal note.',
-            icon: StickyNote,
-            onClick: () => setActiveView('sticky-notes'),
-            visible: true,
-          },
-        ]}
-      />
+      <QuickActions actions={quickActions} />
 
       {/* Attention Required Banner */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
@@ -391,7 +417,21 @@ export const DashboardPage: React.FC = () => {
                   No generated reports yet. Click "Browse Report Templates" to start.
                 </div>
               ) : (
-                userRelevantReports.map((rep) => (
+                userRelevantReports.map((rep) => {
+                  const isPersistedReport = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(rep.id);
+                  const assignment = isPersistedReport
+                    ? getOperationalReportAssignment(rep, workspaceSubjectId)
+                    : rep.assignments?.find((item) => item.recipientUserId === workspaceSubjectId && item.assignmentStatus === 'pending') ?? null;
+                  const hasSignatureMapping = isPersistedReport
+                    ? hasOperationalReportSignatureAssignment(rep, assignment, workspaceSubjectId)
+                    : Boolean(assignment);
+                  const canShowDelegatedActions = !isDelegatedMode || (isPersistedReport && rep.sourceType === 'template');
+                  const recipientCanAct = rep.status === 'Sent'
+                    && !rep.lockedAt
+                    && canShowDelegatedActions
+                    && Boolean(assignment)
+                    && (rep.sourceType === 'uploaded' ? !isDelegatedMode : hasSignatureMapping);
+                  return (
                   <div
                     key={rep.id}
                     onClick={() => openReportViewModal(rep)}
@@ -405,7 +445,7 @@ export const DashboardPage: React.FC = () => {
                         <StatusBadge status={rep.status} />
                       </div>
                       <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 truncate">
-                        <span>Template: {rep.templateName}</span>
+                        <span>{rep.sourceType === 'uploaded' ? 'Uploaded Report' : `Template: ${rep.templateName}`}</span>
                         <span>•</span>
                         <span>Author: {rep.createdByName}</span>
                         <span>•</span>
@@ -417,7 +457,13 @@ export const DashboardPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      {rep.status === 'Sent' && (!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(rep.id) || rep.signatureAssignments?.some((m) => m.recipientUserId === currentUser.id && m.sendCycleId === rep.currentSendCycleId)) && (
+                      {recipientCanAct && isSettingEnabled('allow_return') && isSettingEnabled('workflow.return_for_changes') && hasOperationalPermission('reports.return') && (
+                        <button onClick={() => openReturnReportModal(rep)} className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1"><RotateCcw className="w-3.5 h-3.5" /><span>Return</span></button>
+                      )}
+                      {recipientCanAct && rep.sourceType === 'template' && isSettingEnabled('allow_rejection') && isSettingEnabled('workflow.report_rejection') && hasOperationalPermission('reports.reject') && (
+                        <button onClick={() => openRejectReportModal(rep)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /><span>Reject</span></button>
+                      )}
+                      {recipientCanAct && rep.sourceType === 'template' && hasSignatureMapping && isSettingEnabled('digital_signature') && isSettingEnabled('workflow.digital_signature') && hasOperationalPermission('reports.sign') && (
                         <button
                           onClick={() => openSignReportModal(rep)}
                           className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1 shadow-xs"
@@ -425,9 +471,6 @@ export const DashboardPage: React.FC = () => {
                           <Shield className="w-3.5 h-3.5" />
                           <span>Sign</span>
                         </button>
-                      )}
-                      {rep.status === 'Sent' && hasPermission('reports.reject') && rep.assignments?.some((a) => a.recipientUserId === currentUser.id && a.sendCycleId === rep.currentSendCycleId && a.assignmentStatus === 'pending' && rep.signatureAssignments?.some((m) => m.reportAssignmentId === a.id && m.recipientUserId === currentUser.id && m.sendCycleId === rep.currentSendCycleId)) && (
-                        <button onClick={() => openRejectReportModal(rep)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1 shadow-xs"><XCircle className="w-3.5 h-3.5" /><span>Reject</span></button>
                       )}
 
                       <button
@@ -439,7 +482,8 @@ export const DashboardPage: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -454,7 +498,7 @@ export const DashboardPage: React.FC = () => {
                 </h3>
               </div>
               <button
-                onClick={() => setActiveView('templates')}
+                onClick={browseReportTemplates}
                 className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer"
               >
                 View all templates →
@@ -467,7 +511,18 @@ export const DashboardPage: React.FC = () => {
                   key={tpl.id}
                   className="p-4 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-3 group"
                 >
-                  <div className="flex items-start gap-3 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => selectTemplateFromLibrary(
+                      tpl,
+                      canUseApprovedTemplate,
+                      openFillReportModal,
+                      openTemplateDetail,
+                    )}
+                    disabled={!hasOperationalPermission('templates.view_approved')}
+                    aria-label={canUseApprovedTemplate && !tpl.isPaused ? `Use ${tpl.name} to create a report` : `Preview ${tpl.name}`}
+                    className="flex items-start gap-3 min-w-0 text-left bg-transparent border-0 p-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 cursor-pointer disabled:cursor-default"
+                  >
                     <div className="p-2.5 rounded-lg bg-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors mt-0.5">
                       {getCategoryIcon(tpl.categoryId)}
                     </div>
@@ -482,22 +537,22 @@ export const DashboardPage: React.FC = () => {
                       </div>
                       <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{tpl.description}</p>
                     </div>
-                  </div>
+                  </button>
 
-                  <button
+                  {canUseApprovedTemplate && <button
                     onClick={() => openFillReportModal(tpl)}
                     className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shrink-0 cursor-pointer shadow-xs transition-colors flex items-center gap-1.5"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
                     <span>Use Template</span>
-                  </button>
+                  </button>}
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <WorkflowMonitor currentUser={currentUser} reports={reports} templates={templates} pendingTemplateApprovals={pendingTemplateApprovals} myTemplateRequests={myTemplateRequests} setActiveView={setActiveView} openReportViewModal={openReportViewModal} openTemplateDetail={openTemplateDetail} openAddTemplateModal={openAddTemplateModal} openApprovalDetail={openApprovalDetail} hasPermission={hasPermission} />
+        {!operationalWorkspaceLoading && <WorkflowMonitor currentUser={currentUser} operationalSubjectId={workspaceSubjectId} workspaceKey={`${authorityContext?.mode ?? 'unresolved'}:${authorityContext?.delegation?.delegationId ?? 'own'}:${authorityContext?.authority.roleId ?? ''}:${workspaceSubjectId}`} activityWasPreviouslyLoaded={activityTimelineWasLoaded} markActivityTimelineLoaded={markActivityTimelineLoaded} reports={reports} templates={templates} pendingTemplateApprovals={pendingTemplateApprovals} myTemplateRequests={myTemplateRequests} setActiveView={setActiveView} openReportViewModal={openReportViewModal} loadReportDetail={getReportDetail} openTemplateDetail={openTemplateDetail} openAddTemplateModal={openAddTemplateModal} openApprovalDetail={openApprovalDetail} hasPermission={hasOperationalPermission} hasTemplateApprovalPermission={hasTemplateApprovalPermission} />}
       </div>
     </div>
   );

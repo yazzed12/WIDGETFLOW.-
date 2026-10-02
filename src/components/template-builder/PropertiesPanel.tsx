@@ -7,6 +7,8 @@ import { TableAggregateModal } from './TableAggregateModal';
 import { RichParagraphEditor } from './RichParagraphEditor.js';
 import { SAFE_FONT_FAMILIES } from '../../shared/themeResolver';
 import { configurationService } from '../../features/configuration/services/configurationService';
+import { clampComponentLayoutWidthPercent, getLayoutWidthPercent, getMinimumLayoutWidthPercent, withLayoutWidthPercent } from '../../shared/layout';
+import { AppearanceControls } from './AppearanceControls';
 
 interface PropertiesPanelProps {
   builderMode?: 'template' | 'admin-pack';
@@ -20,6 +22,7 @@ interface PropertiesPanelProps {
   categories: Category[];
   onUpdateTemplateSettings: (updates: Partial<WidgetTemplate>) => void;
   onOpenHelp?: (type: string) => void;
+  onEnsureTemplateDraft?: () => Promise<string | null>;
 }
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
@@ -34,12 +37,15 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   categories,
   onUpdateTemplateSettings,
   onOpenHelp,
+  onEnsureTemplateDraft,
 }) => {
   const [newOptionInput, setNewOptionInput] = useState('');
   const [newColName, setNewColName] = useState('');
   const [editingColModal, setEditingColModal] = useState<{ column: TableColumnConfig; index: number } | null>(null);
   const [editingAggregateModal, setEditingAggregateModal] = useState<{ aggregate: TableAggregateConfig; index: number } | null>(null);
   const [signatureRoles, setSignatureRoles] = useState<Array<{ key: string; name: string }>>([]);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (builderMode !== 'template') return;
@@ -52,7 +58,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   if (!selectedComponent) {
     if (builderMode === 'admin-pack') {
       return (
-        <aside className="w-full lg:w-80 bg-slate-50/80 border-l border-slate-200 p-5 space-y-5 overflow-y-auto shrink-0 select-none">
+        <aside className="w-full min-w-0 h-full bg-slate-50/80 border-l border-slate-200 p-5 space-y-5 overflow-y-auto select-none">
           <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
             <Settings className="w-4 h-4 text-indigo-600" />
             <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Pack Builder</h2>
@@ -67,7 +73,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       );
     }
     return (
-      <aside className="w-full lg:w-80 bg-slate-50/80 border-l border-slate-200 p-5 space-y-6 overflow-y-auto shrink-0 select-none">
+      <aside className="w-full min-w-0 h-full bg-slate-50/80 border-l border-slate-200 p-5 space-y-6 overflow-y-auto select-none">
         <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
           <Settings className="w-4 h-4 text-indigo-600" />
           <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Template Settings</h2>
@@ -128,44 +134,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             />
           </div>
 
-          {/* Document Header & Footer Config */}
-          <div className="pt-3 border-t border-slate-200 space-y-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Document Header & Footer</h3>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">Document Subtitle</label>
-              <input
-                type="text"
-                value={templateState.headerConfig?.subtitle || ''}
-                onChange={(e) =>
-                  onUpdateTemplateSettings({
-                    headerConfig: { ...templateState.headerConfig, subtitle: e.target.value },
-                  })
-                }
-                disabled={!isDraft}
-                placeholder="e.g. Firm-wide Operations Intake Form"
-                className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">Confidentiality Footer</label>
-              <select
-                value={templateState.footerConfig?.confidentialityLabel || 'Internal Use Only'}
-                onChange={(e) =>
-                  onUpdateTemplateSettings({
-                    footerConfig: { ...templateState.footerConfig, confidentialityLabel: e.target.value },
-                  })
-                }
-                disabled={!isDraft}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl cursor-pointer"
-              >
-                <option value="Internal Use Only">Internal Use Only</option>
-                <option value="Strictly Confidential">Strictly Confidential</option>
-                <option value="Public Record">Public Record</option>
-              </select>
-            </div>
-          </div>
         </div>
       </aside>
     );
@@ -176,6 +144,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const hasOptions = selectedComponent.type === 'select' || selectedComponent.type === 'radio';
 
   const layoutWidth = (selectedComponent as any).layoutWidth || selectedComponent.layout?.width || 'full';
+  const layoutWidthPercent = getLayoutWidthPercent(selectedComponent);
+  const updateWidthPercent = (value: number) => onUpdateComponent(withLayoutWidthPercent(selectedComponent, value));
+  const minimumWidthPercent = getMinimumLayoutWidthPercent(selectedComponent);
   const optionsList: ComponentOption[] = (selectedComponent.options || []).map((opt: any) =>
     typeof opt === 'string' ? { label: opt, value: opt } : opt
   );
@@ -193,12 +164,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const numMin = rawMin !== undefined ? Number(rawMin) : 1;
   const numMax = rawMax !== undefined ? Number(rawMax) : 50;
 
+  const supportsAppearance = !['signature', 'divider', 'spacer'].includes(selectedComponent.type);
+
   const isMinInvalid = isNaN(numMin) || numMin < 0 || !Number.isInteger(numMin);
   const isMaxInvalid = isNaN(numMax) || numMax < 1 || !Number.isInteger(numMax);
   const isRangeInvalid = !isMinInvalid && !isMaxInvalid && numMin > numMax;
 
   return (
-    <aside className="w-full lg:w-80 bg-slate-50/80 border-l border-slate-200 p-5 space-y-6 overflow-y-auto shrink-0 select-none">
+    <aside className="w-full min-w-0 h-full bg-slate-50/80 border-l border-slate-200 p-5 space-y-6 overflow-y-auto select-none">
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <div className="flex items-center gap-2">
           <Sliders className="w-4 h-4 text-indigo-600" />
@@ -277,11 +250,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 key={w.id}
                 type="button"
                 onClick={() =>
-                  onUpdateComponent({
+                  onUpdateComponent(withLayoutWidthPercent({
                     ...selectedComponent,
                     layoutWidth: w.id as any,
-                    layout: { width: w.id as any },
-                  })
+                    layout: { ...(selectedComponent.layout || {}), width: w.id as any },
+                  }, w.id === 'full' ? 100 : w.id === 'half' ? 50 : 33))
                 }
                 disabled={!isDraft}
                 className={`py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
@@ -294,7 +267,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </button>
             ))}
           </div>
+          <div className="mt-2 grid grid-cols-[1fr_64px] items-center gap-2">
+            <input type="range" min={minimumWidthPercent} max={100} step={1} value={Math.max(minimumWidthPercent, layoutWidthPercent)} onChange={(e) => updateWidthPercent(Number(e.target.value))} disabled={!isDraft} aria-label="Element width percentage" className="accent-indigo-600" />
+            <label className="relative">
+              <input type="number" min={minimumWidthPercent} max={100} value={Math.max(minimumWidthPercent, layoutWidthPercent)} onChange={(e) => updateWidthPercent(clampComponentLayoutWidthPercent(selectedComponent, Number(e.target.value)))} disabled={!isDraft} aria-label="Element width percentage value" className="w-full px-2 py-1.5 pr-5 text-xs bg-white border border-slate-200 rounded-lg font-semibold" />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">%</span>
+            </label>
+          </div>
+          <p className="mt-1 text-[10px] text-slate-400">Minimum for {selectedComponent.type}: {minimumWidthPercent}%</p>
         </div>
+
+        {supportsAppearance && (
+          <AppearanceControls component={selectedComponent} onUpdate={onUpdateComponent} disabled={!isDraft} />
+        )}
 
         {/* Required Toggle */}
         {!isContentComponent && selectedComponent.type !== 'divider' && selectedComponent.type !== 'spacer' && (
@@ -566,6 +551,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 ))}
               </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-[10px] font-bold text-slate-600">Line Spacing
+                <select disabled={!isDraft} value={selectedComponent.headingConfig?.lineHeight || 'theme'} onChange={(e) => onUpdateComponent({ ...selectedComponent, headingConfig: { ...selectedComponent.headingConfig, lineHeight: e.target.value } })} className="mt-1 w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs">
+                  <option value="theme">Theme Default</option><option value="1.2">Tight</option><option value="1.5">Normal</option><option value="1.8">Relaxed</option>
+                </select>
+              </label>
+              <label className="text-[10px] font-bold text-slate-600">Letter Spacing
+                <select disabled={!isDraft} value={selectedComponent.headingConfig?.letterSpacing || 'theme'} onChange={(e) => onUpdateComponent({ ...selectedComponent, headingConfig: { ...selectedComponent.headingConfig, letterSpacing: e.target.value } })} className="mt-1 w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs">
+                  <option value="theme">Theme Default</option><option value="tight">Tight</option><option value="normal">Normal</option><option value="wide">Wide</option>
+                </select>
+              </label>
+            </div>
           </div>
         )}
 
@@ -586,6 +584,71 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 })
               }
             />
+
+            <div className="border-t border-slate-200 pt-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-900 uppercase">Typography & Spacing</h3>
+                <button
+                  type="button"
+                  disabled={!isDraft}
+                  onClick={() => onUpdateComponent({
+                    ...selectedComponent,
+                    paragraphConfig: {
+                      ...selectedComponent.paragraphConfig,
+                      fontFamily: 'theme', fontSize: 'theme', fontWeight: 'theme', fontColor: 'theme',
+                      lineHeight: 'theme', letterSpacing: 'theme', paragraphSpacing: undefined,
+                    },
+                  })}
+                  className="px-2 py-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3 h-3 inline mr-1" /> Reset Typography
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[10px] font-bold text-slate-600">Font
+                  <select disabled={!isDraft} value={selectedComponent.paragraphConfig?.fontFamily || 'theme'} onChange={(e) => onUpdateComponent({ ...selectedComponent, paragraphConfig: { ...selectedComponent.paragraphConfig, fontFamily: e.target.value } })} className="mt-1 w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs">
+                    <option value="theme">Theme Default</option>
+                    {SAFE_FONT_FAMILIES.map((font) => <option key={font.id} value={font.id}>{font.name}</option>)}
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold text-slate-600">Size
+                  <select disabled={!isDraft} value={selectedComponent.paragraphConfig?.fontSize || 'theme'} onChange={(e) => onUpdateComponent({ ...selectedComponent, paragraphConfig: { ...selectedComponent.paragraphConfig, fontSize: e.target.value } })} className="mt-1 w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs">
+                    <option value="theme">Theme Default</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option>
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold text-slate-600">Weight
+                  <select disabled={!isDraft} value={selectedComponent.paragraphConfig?.fontWeight || 'theme'} onChange={(e) => onUpdateComponent({ ...selectedComponent, paragraphConfig: { ...selectedComponent.paragraphConfig, fontWeight: e.target.value } })} className="mt-1 w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs">
+                    <option value="theme">Theme Default</option><option value="400">Normal</option><option value="500">Medium</option><option value="700">Bold</option>
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold text-slate-600">Line Spacing
+                  <select disabled={!isDraft} value={selectedComponent.paragraphConfig?.lineHeight || 'theme'} onChange={(e) => onUpdateComponent({ ...selectedComponent, paragraphConfig: { ...selectedComponent.paragraphConfig, lineHeight: e.target.value } })} className="mt-1 w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs">
+                    <option value="theme">Theme Default</option><option value="1.2">Tight</option><option value="1.5">Normal</option><option value="1.8">Relaxed</option>
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold text-slate-600">Letter Spacing
+                  <select disabled={!isDraft} value={selectedComponent.paragraphConfig?.letterSpacing || 'theme'} onChange={(e) => onUpdateComponent({ ...selectedComponent, paragraphConfig: { ...selectedComponent.paragraphConfig, letterSpacing: e.target.value } })} className="mt-1 w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs">
+                    <option value="theme">Theme Default</option><option value="tight">Tight</option><option value="normal">Normal</option><option value="wide">Wide</option>
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold text-slate-600">Paragraph Spacing
+                  <input disabled={!isDraft} type="number" min={0} max={80} value={selectedComponent.paragraphConfig?.paragraphSpacing ?? 12} onChange={(e) => onUpdateComponent({ ...selectedComponent, paragraphConfig: { ...selectedComponent.paragraphConfig, paragraphSpacing: Math.max(0, Math.min(80, Number(e.target.value))) } })} className="mt-1 w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs" />
+                </label>
+                <label className="text-[10px] font-bold text-slate-600">Text Color
+                  <input disabled={!isDraft} type="color" value={selectedComponent.paragraphConfig?.fontColor && selectedComponent.paragraphConfig.fontColor !== 'theme' ? selectedComponent.paragraphConfig.fontColor : '#334155'} onChange={(e) => onUpdateComponent({ ...selectedComponent, paragraphConfig: { ...selectedComponent.paragraphConfig, fontColor: e.target.value } })} className="mt-1 h-8 w-full rounded-lg border border-slate-200 cursor-pointer" />
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1">Alignment</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['left', 'center', 'right'] as const).map((align) => (
+                    <button key={align} type="button" disabled={!isDraft} onClick={() => onUpdateComponent({ ...selectedComponent, alignment: align, paragraphConfig: { ...selectedComponent.paragraphConfig, alignment: align } })} className={`py-1 text-xs font-bold capitalize rounded-lg border disabled:opacity-50 ${(selectedComponent.paragraphConfig?.alignment || selectedComponent.alignment || 'left') === align ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-200'}`}>{align}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -798,28 +861,38 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           const handleAssetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             const file = e.target.files?.[0];
             if (!file) return;
-
+            e.target.value = '';
+            setImageUploadError(null);
+            if (builderMode !== 'template' || !onEnsureTemplateDraft) {
+              setImageUploadError('Save this image in a template before uploading it.');
+              return;
+            }
+            setIsUploadingImage(true);
             try {
-              const reader = new FileReader();
-              reader.onload = async () => {
-                const base64Data = reader.result as string;
-                const data = await apiService.uploadTemplateAsset({ filename: file.name, mimeType: file.type, base64Data, linkedTemplateId: templateState.id });
-                if (data) {
-                  onUpdateComponent({
-                    ...selectedComponent,
-                    assetUrl: data.url,
-                    assetId: data.id,
-                    imageConfig: {
-                      ...selectedComponent.imageConfig,
-                      assetUrl: data.url,
-                      assetId: data.id,
-                    },
-                  });
-                }
-              };
-              reader.readAsDataURL(file);
+              const linkedTemplateId = await onEnsureTemplateDraft();
+              if (!linkedTemplateId) return;
+              const base64Data = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('IMAGE_READ_FAILED'));
+                reader.onerror = () => reject(reader.error || new Error('IMAGE_READ_FAILED'));
+                reader.readAsDataURL(file);
+              });
+              const data = await apiService.uploadTemplateAsset({ filename: file.name, mimeType: file.type, base64Data, linkedTemplateId });
+              onUpdateComponent({
+                ...selectedComponent,
+                assetUrl: data.url,
+                assetId: data.id,
+                imageConfig: {
+                  ...selectedComponent.imageConfig,
+                  assetUrl: data.url,
+                  assetId: data.id,
+                },
+              });
             } catch (err) {
-              console.error('Failed to upload image asset:', err);
+              if (import.meta.env.DEV) console.error('Failed to upload image asset.');
+              setImageUploadError("We couldn't upload this image. Please try again.");
+            } finally {
+              setIsUploadingImage(false);
             }
           };
 
@@ -832,14 +905,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">Upload Image File</label>
                 <label className="flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 border border-dashed border-indigo-300 rounded-xl text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer text-xs font-bold">
                   <Plus className="w-4 h-4 text-indigo-600" />
-                  <span>Choose Image File (PNG, JPEG, WebP)</span>
+                  <span>{isUploadingImage ? 'Uploading image…' : 'Choose Image File (PNG, JPEG, WebP)'}</span>
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/jpg,image/webp"
                     onChange={handleAssetUpload}
+                    disabled={isUploadingImage || !isDraft}
                     className="hidden"
                   />
                 </label>
+                {imageUploadError && <p role="alert" className="mt-2 text-[11px] font-medium text-rose-600">{imageUploadError}</p>}
               </div>
 
               <div>

@@ -24,6 +24,7 @@ import {
   resolveComponentStyle,
   resolveFormStyle,
   resolveKPIStyle,
+  resolveElementAppearance,
 } from '../../shared/themeResolver.js';
 import type { TemplateTheme } from '../../types';
 import { AuthenticatedAssetImage } from '../common/AuthenticatedAssetImage';
@@ -46,6 +47,8 @@ interface TemplateComponentRendererProps {
   theme?: TemplateTheme;
   reportId?: string;
   ensureReportId?: () => Promise<string>;
+  simulationMode?: boolean;
+  fieldDomId?: string;
 }
 
 const ImageComponentRenderer: React.FC<{
@@ -54,7 +57,7 @@ const ImageComponentRenderer: React.FC<{
   label?: string;
   colClass: string;
 }> = ({ component, mode, label, colClass }) => {
-  const [imageError, setImageError] = React.useState(false);
+  const [failedSource, setFailedSource] = React.useState<string | null>(null);
 
   const iConf = (component as any).imageConfig || {};
   const align = iConf.alignment || (component as any).alignment || 'center';
@@ -64,24 +67,26 @@ const ImageComponentRenderer: React.FC<{
   const rawUrl = iConf.assetUrl || (component as any).assetUrl;
   const rawId = iConf.assetId || (component as any).assetId;
   const resolvedUrl = resolveAssetUrl(rawUrl, rawId);
+  const imageError = Boolean(resolvedUrl && failedSource === resolvedUrl);
+  const handleImageError = React.useCallback(() => {
+    setFailedSource(resolvedUrl);
+  }, [resolvedUrl]);
   const alt = iConf.altText || (component as any).altText || label || 'Template image';
   const caption = iConf.caption || (component as any).caption;
+  const appearance = resolveElementAppearance(component);
 
   const alignClass = align === 'left' ? 'text-left' : align === 'right' ? 'text-right' : 'text-center';
   const widthClass = width === 'small' ? 'w-1/4' : width === 'large' ? 'w-3/4' : width === 'full' ? 'w-full' : 'w-1/2';
   const fitClass = fitMode === 'cover' ? 'object-cover' : fitMode === 'natural' ? 'object-none' : 'object-contain';
 
-  React.useEffect(() => {
-    setImageError(false);
-  }, [resolvedUrl]);
-
   return (
-    <div className={`${colClass} ${alignClass} space-y-1.5 py-2`}>
+    <div className={`${colClass} ${alignClass} space-y-1.5 py-2`} style={{ ...(appearance.backgroundColor ? { backgroundColor: appearance.backgroundColor } : {}), ...(appearance.borderColor ? { borderColor: appearance.borderColor } : {}), ...(appearance.borderWidth !== undefined ? { borderWidth: appearance.borderWidth } : {}), ...(appearance.borderStyle ? { borderStyle: appearance.borderStyle } : {}), ...(appearance.borderRadius !== undefined ? { borderRadius: appearance.borderRadius } : {}), ...(appearance.padding !== undefined ? { padding: appearance.padding } : {}), ...(appearance.textAlign ? { textAlign: appearance.textAlign } : {}) }}>
       {resolvedUrl && !imageError ? (
         <AuthenticatedAssetImage
           src={resolvedUrl}
           alt={alt}
-          onError={() => setImageError(true)}
+          onError={handleImageError}
+          onAssetError={handleImageError}
           className={`max-h-72 rounded-2xl shadow-xs border border-slate-200 inline-block ${widthClass} ${fitClass}`}
         />
       ) : resolvedUrl && imageError ? (
@@ -91,13 +96,11 @@ const ImageComponentRenderer: React.FC<{
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>Image could not be loaded.</span>
             </div>
-            <p className="text-[11px] text-rose-600 leading-relaxed">
-              The image asset referenced at <code className="font-mono bg-rose-100 px-1 py-0.5 rounded select-all">{resolvedUrl}</code> could not be fetched or is unavailable.
-            </p>
+            <p className="text-[11px] text-rose-600 leading-relaxed">We couldn't load this image. Try refreshing the page or upload the image again.</p>
           </div>
         ) : (
           <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl inline-block text-slate-500 text-xs italic">
-            [Image: {alt}]
+            We couldn't load this image.
           </div>
         )
       ) : (
@@ -128,6 +131,8 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
   theme,
   reportId,
   ensureReportId,
+  simulationMode = false,
+  fieldDomId,
 }) => {
   const fieldKey = getReportBusinessFieldKey(component) || '';
   const label = component.label || fieldKey;
@@ -151,6 +156,16 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
   };
 
   const colClass = getColSpanClass(layoutWidth);
+  const appearance = resolveElementAppearance(component);
+  const appearanceStyle = {
+    ...(appearance.backgroundColor ? { backgroundColor: appearance.backgroundColor } : {}),
+    ...(appearance.borderColor ? { borderColor: appearance.borderColor } : {}),
+    ...(appearance.borderWidth !== undefined ? { borderWidth: appearance.borderWidth } : {}),
+    ...(appearance.borderStyle ? { borderStyle: appearance.borderStyle } : {}),
+    ...(appearance.borderRadius !== undefined ? { borderRadius: appearance.borderRadius } : {}),
+    ...(appearance.padding !== undefined ? { padding: appearance.padding } : {}),
+    ...(appearance.textAlign ? { textAlign: appearance.textAlign } : {}),
+  } as React.CSSProperties;
 
   // Normalize Options
   const getNormalizedOptions = (): ComponentOption[] => {
@@ -213,7 +228,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
     const colorClass = colorMap[color] || colorMap.default;
 
     return (
-      <div className={`${colClass} py-3 flex ${alignClass}`}>
+      <div className={`${colClass} py-3 flex ${alignClass}`} style={appearanceStyle}>
         <div className={`relative flex items-center justify-center ${widthClass}`}>
           <div className={`w-full ${borderThicknessClass} ${borderStyleClass} ${colorClass}`} />
           {label && label !== 'Divider' && (
@@ -234,14 +249,14 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
       return (
         <div
           className={`${colClass} bg-slate-100/60 border border-dashed border-slate-300 rounded-lg flex items-center justify-center text-[10px] text-slate-500 font-mono font-bold select-none my-1`}
-          style={{ height: `${heightPx}px`, minHeight: '28px' }}
+          style={{ height: `${heightPx}px`, minHeight: '28px', ...appearanceStyle }}
         >
           <span>↕ Spacer — {heightPx}px</span>
         </div>
       );
     }
 
-    return <div className={colClass} style={{ height: `${heightPx}px` }} />;
+    return <div className={colClass} style={{ height: `${heightPx}px`, ...appearanceStyle }} />;
   }
 
   // 3. IMAGE COMPONENT
@@ -275,7 +290,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
     const IconComp = s.IconComponent;
 
     return (
-      <div className={`${colClass} p-4 rounded-2xl border ${s.bg} ${s.border} ${s.text} flex items-start gap-3 shadow-2xs`}>
+      <div className={`${colClass} p-4 rounded-2xl border ${s.bg} ${s.border} ${s.text} flex items-start gap-3 shadow-2xs`} style={appearanceStyle}>
         {showIcon && <IconComp className={`w-5 h-5 shrink-0 mt-0.5 ${s.iconColor}`} />}
         <div className="space-y-0.5 min-w-0 flex-1">
           {title && <h4 className="text-xs font-bold">{title}</h4>}
@@ -295,7 +310,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
     return (
       <div
         className={`${colClass} p-5 rounded-2xl shadow-xs space-y-2 border`}
-        style={{ backgroundColor: kpiStyle.surfaceBg, borderColor: kpiStyle.borderColor }}
+        style={{ backgroundColor: kpiStyle.surfaceBg, borderColor: kpiStyle.borderColor, ...appearanceStyle }}
       >
         <div className="flex items-center justify-between">
           <span
@@ -354,7 +369,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
   // 6. SIGNATURE FIELD COMPONENT
   if (component.type === 'signature') {
     return (
-      <div className={colClass}>
+      <div className={colClass} id={fieldDomId}>
         <SignatureRenderer
           component={component as TemplateComponent}
           readOnly={mode === 'readOnly'}
@@ -368,6 +383,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
           theme={theme}
           value={value}
           reportId={reportId}
+          simulationMode={simulationMode}
         />
       </div>
     );
@@ -376,35 +392,39 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
   // 7. TABLE COMPONENT V2
   if (component.type === 'table') {
     return (
-      <TableV2Renderer
-        component={component as TemplateComponent}
-        value={value}
-        mode={mode}
-        onChange={onChange}
-        disabled={disabled}
-        theme={theme}
-      />
+      <div id={fieldDomId}>
+        <TableV2Renderer
+          component={component as TemplateComponent}
+          value={value}
+          mode={mode}
+          onChange={onChange}
+          disabled={disabled}
+          theme={theme}
+        />
+      </div>
     );
   }
 
   // REPEATING GROUP COMPONENT
   if (component.type === 'repeating_group') {
     return (
-      <RepeatingGroupRenderer
-        component={component}
-        value={value}
-        mode={mode}
-        onChange={onChange}
-        disabled={disabled}
-        theme={theme}
-      />
+      <div id={fieldDomId}>
+        <RepeatingGroupRenderer
+          component={component}
+          value={value}
+          mode={mode}
+          onChange={onChange}
+          disabled={disabled}
+          theme={theme}
+        />
+      </div>
     );
   }
 
   // 8. RATING COMPONENT
   if (component.type === 'rating') {
     return (
-      <div className={`${colClass} space-y-1.5`}>
+      <div className={`${colClass} space-y-1.5`} id={fieldDomId}>
         <label className="block text-xs font-bold text-slate-800">
           {label}
           {component.required && <span className="text-rose-500 ml-0.5">*</span>}
@@ -457,7 +477,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
   // 10. FILE ATTACHMENT COMPONENT
   if (component.type === 'file') {
     return (
-      <div className={`${colClass} space-y-1.5`}>
+      <div className={`${colClass} space-y-1.5`} id={fieldDomId}>
         <label className="block text-xs font-bold text-slate-800">
           {label}
           {component.required && <span className="text-rose-500 ml-0.5">*</span>}
@@ -474,6 +494,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
           error={error}
           reportId={reportId}
           ensureReportId={ensureReportId}
+          simulationMode={simulationMode}
         />
       </div>
     );
@@ -555,6 +576,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
       <div
         className={`${colClass} border-b border-slate-200/60`}
         style={{
+          ...appearanceStyle,
           marginTop: resolved.marginTop,
           marginBottom: resolved.marginBottom,
           textAlign: resolved.textAlign,
@@ -567,6 +589,8 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
             fontSize: resolved.fontSize,
             fontWeight: resolved.fontWeight,
             color: resolved.color,
+            lineHeight: resolved.lineHeight,
+            letterSpacing: resolved.letterSpacing,
             fontStyle: hConf.italic ? 'italic' : 'normal',
             textDecoration: hConf.underline ? 'underline' : 'none',
           }}
@@ -596,6 +620,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
       <div
         className={`${colClass} py-1.5`}
         style={{
+          ...appearanceStyle,
           textAlign: resolved.textAlign,
           marginBottom: resolved.marginBottom,
         }}
@@ -608,6 +633,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
             fontWeight: resolved.fontWeight,
             color: resolved.color,
             lineHeight: resolved.lineHeight,
+            letterSpacing: resolved.letterSpacing,
           }}
           dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
         />
@@ -633,15 +659,20 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
     return (
       <div className={`${colClass} p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 font-semibold flex items-center gap-2`}>
         <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>Renderer unavailable for component type: {component.type}</span>
+        <span>{simulationMode ? 'This component is not interactive in Test Run.' : `Renderer unavailable for component type: ${component.type}`}</span>
       </div>
     );
   }
 
   const formStyle = resolveFormStyle(component as TemplateComponent, theme);
+  const fieldAppearanceStyle: React.CSSProperties = {
+    ...(formStyle.borderWidth !== undefined ? { borderWidth: formStyle.borderWidth } : {}),
+    ...(formStyle.borderStyle ? { borderStyle: formStyle.borderStyle } : {}),
+    ...(formStyle.padding !== undefined ? { padding: formStyle.padding } : {}),
+  };
 
   return (
-    <div className={`${colClass} space-y-1.5`}>
+      <div className={`${colClass} space-y-1.5`} style={appearanceStyle} id={fieldDomId}>
       <div className="flex items-center justify-between">
         <label
           className="block text-xs font-bold"
@@ -689,6 +720,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
                 backgroundColor: formStyle.fieldBg,
                 borderColor: error ? undefined : formStyle.borderColor,
                 borderRadius: formStyle.borderRadius,
+                ...fieldAppearanceStyle,
               }}
               className={`w-full p-3 text-xs border text-slate-900 focus:outline-none focus:ring-2 ${
                 disabled ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
@@ -703,6 +735,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
                 backgroundColor: formStyle.fieldBg,
                 borderColor: error ? undefined : formStyle.borderColor,
                 borderRadius: formStyle.borderRadius,
+                ...fieldAppearanceStyle,
               }}
               className={`w-full p-2.5 text-xs border text-slate-900 focus:outline-none cursor-pointer font-medium ${
                 disabled ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
@@ -772,6 +805,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
                   backgroundColor: formStyle.fieldBg,
                   borderColor: error ? undefined : formStyle.borderColor,
                   borderRadius: formStyle.borderRadius,
+                  ...fieldAppearanceStyle,
                 }}
                 className={`w-full p-2.5 pr-9 text-xs border text-slate-900 focus:outline-none ${
                   disabled ? 'bg-slate-100 text-slate-600 font-mono font-bold cursor-not-allowed border-slate-200' : ''
@@ -793,6 +827,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
                   backgroundColor: formStyle.fieldBg,
                   borderColor: error ? undefined : formStyle.borderColor,
                   borderRadius: formStyle.borderRadius,
+                  ...fieldAppearanceStyle,
                 }}
                 className={`w-full p-2.5 pr-9 text-xs border text-slate-900 focus:outline-none ${
                   disabled ? 'bg-slate-100 text-slate-600 font-mono font-bold cursor-not-allowed border-slate-200' : ''
@@ -811,6 +846,7 @@ export const TemplateComponentRenderer: React.FC<TemplateComponentRendererProps>
                 backgroundColor: formStyle.fieldBg,
                 borderColor: error ? undefined : formStyle.borderColor,
                 borderRadius: formStyle.borderRadius,
+                ...fieldAppearanceStyle,
               }}
               className={`w-full p-2.5 text-xs border text-slate-900 focus:outline-none ${
                 disabled ? 'bg-slate-100 text-slate-600 font-mono font-bold cursor-not-allowed border-slate-200' : ''

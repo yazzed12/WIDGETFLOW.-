@@ -16,6 +16,15 @@ export interface OrganizationActivityEvent {
   reason: string | null;
   fromStatus: string | null;
   toStatus: string | null;
+  delegationId?: string | null;
+  delegatedByUserId?: string | null;
+  delegatedByName?: string | null;
+  authorityRoleId?: string | null;
+  authorityRoleKey?: string | null;
+  authorityRoleName?: string | null;
+  authorityGovernanceLevel?: string | null;
+  delegationStartAt?: string | null;
+  delegationEndAt?: string | null;
 }
 
 export interface ActivityPage {

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import type { ReportInstance } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { X, XCircle, AlertTriangle } from 'lucide-react';
+import { normalizeError } from '../../lib/errors/errorHandling';
+import { DelegatedActionNotice } from './DelegatedActionNotice';
 
 interface RejectReportModalProps {
   report: ReportInstance;
@@ -16,6 +18,7 @@ export const RejectReportModal: React.FC<RejectReportModalProps> = ({ report, on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!reason.trim()) {
       setError('A rejection reason is required.');
       return;
@@ -25,8 +28,9 @@ export const RejectReportModal: React.FC<RejectReportModalProps> = ({ report, on
     try {
       await rejectReport(report.id, reason.trim());
       onClose();
-    } catch {
-      setError('Failed to reject report.');
+    } catch (submitError) {
+      const rawCode = String((submitError as { code?: unknown })?.code ?? '').toUpperCase();
+      setError(rawCode === 'WORKSPACE_NOT_READY' ? 'Your report workspace is refreshing. Please try again.' : normalizeError(submitError).message);
     } finally {
       setIsSubmitting(false);
     }
@@ -64,6 +68,8 @@ export const RejectReportModal: React.FC<RejectReportModalProps> = ({ report, on
               Rejecting this report records a final review decision. The report will not be eligible for signing or resubmission.
             </p>
           </div>
+
+          <DelegatedActionNotice action="Rejecting" />
 
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1">

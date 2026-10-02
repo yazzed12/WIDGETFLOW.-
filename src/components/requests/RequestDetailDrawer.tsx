@@ -2,6 +2,8 @@ import React from 'react';
 import type { WidgetTemplate } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { RequestCommentThread } from '../approvals/RequestCommentThread';
+import { belongsToOperationalSubject } from '../../features/delegations/operationalWorkspaceFilters';
+import { canEditTemplateDraft } from '../../features/delegations/effectiveAuthority';
 import { X, Clock, CheckCircle2, XCircle, AlertCircle, Edit3, Send, Shield, User as UserIcon, Calendar, FileText, RotateCcw } from 'lucide-react';
 
 interface RequestDetailDrawerProps {
@@ -15,13 +17,18 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
     approvalRecords,
     openAddTemplateModal,
     submitTemplateForApproval,
-    currentUser,
+    isDelegatedMode,
+    operationalSubjectUserId,
+    hasOperationalPermission,
   } = useApp();
 
   const categoryName = categories.find((c) => c.id === template.categoryId)?.name || 'General';
 
   // Filter audit trail for this template
   const history = approvalRecords.filter((r) => r.templateId === template.id);
+  const isOperationalOwner = belongsToOperationalSubject(template, operationalSubjectUserId ?? '');
+  const canEditTemplate = isOperationalOwner
+    && canEditTemplateDraft(hasOperationalPermission);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -208,9 +215,9 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
           </div>
 
           {/* Request Comment Thread */}
-          <div className="pt-4 border-t border-slate-200">
+          {!isDelegatedMode && <div className="pt-4 border-t border-slate-200">
             <RequestCommentThread templateId={template.id} />
-          </div>
+          </div>}
         </div>
 
         {/* Drawer Actions */}
@@ -223,7 +230,7 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
           </button>
 
           {/* Draft Actions */}
-          {template.status === 'Draft' && template.createdById === currentUser.id && (
+          {canEditTemplate && template.status === 'Draft' && (
             <div className="flex items-center gap-2">
               <button
                 onClick={handleContinueEditing}
@@ -232,20 +239,20 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ templa
                 <Edit3 className="w-4 h-4" />
                 <span>{template.returnedAt ? 'Edit & Resubmit' : 'Continue Editing'}</span>
               </button>
-              {!template.returnedAt && (
+              {hasOperationalPermission('templates.submit') && !template.returnedAt && (
                 <button
                   onClick={handleSubmitDraftDirectly}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Submit for Approval</span>
+                  <span>{template.returnedAt ? 'Resubmit for Approval' : 'Submit for Approval'}</span>
                 </button>
               )}
             </div>
           )}
 
           {/* Rejected Actions */}
-          {template.status === 'Rejected' && template.createdById === currentUser.id && (
+          {canEditTemplate && template.status === 'Rejected' && (
             <button
               onClick={handleContinueEditing}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"

@@ -9,6 +9,7 @@ export const PERMISSION_GROUPS = [
       ['templates.submit', 'Submit Templates'],
       ['templates.preview', 'Preview Templates'],
       ['templates.use', 'Use Templates'],
+      ['templates.archive_any', 'Delete Templates'],
     ],
   },
   {

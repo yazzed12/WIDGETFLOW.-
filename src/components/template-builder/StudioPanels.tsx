@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import type { WidgetTemplate, Category, TemplateTheme, ContentPack, AdminPack, ContentLibraryItem } from '../../types';
+import React, { useEffect, useMemo, useState } from 'react';
+import type { WidgetTemplate, Category, TemplateTheme, ContentPack, AdminPack, ContentLibraryItem, BuilderValidationIssue } from '../../types';
 import type { StudioTab } from './StudioRail';
 import { TOOLBOX_ITEMS } from './BuilderToolbox';
 import type { ToolboxItem } from './BuilderToolbox';
@@ -33,7 +33,7 @@ interface StudioPanelsProps {
   onStartFromTemplate: (template: WidgetTemplate) => void;
   onOpenImportModal: () => void;
   onAddComponent: (item: ToolboxItem) => void;
-  onAddTextPreset: (preset: { type: 'heading' | 'paragraph'; label: string }) => void;
+  onAddTextPreset: (preset: { type: 'heading' | 'paragraph'; label: string; headingLevel?: 'h1' | 'h2' | 'h3'; paragraphStyle?: 'body' | 'instruction' | 'caption' }) => void;
   onAddDataFieldPreset: (preset: { type: any; label: string; key: string; placeholder?: string; options?: string[]; required?: boolean }) => void;
   onAddPrebuiltBlock?: (blockType: 'employee' | 'request' | 'budget' | 'approval') => void;
   onAddToPack?: (item: ToolboxItem) => void;
@@ -45,7 +45,14 @@ interface StudioPanelsProps {
   onInsertAdminPack?: (pack: AdminPack) => void;
   onInsertContentItem?: (item: ContentLibraryItem) => void;
   sections: any[];
+  selectedSectionId?: string | null;
+  selectedComponentId?: string | null;
   onSelectSection: (sectionId: string) => void;
+  onSelectComponent?: (sectionId: string, componentId: string, shouldScroll?: boolean) => void;
+  onDuplicateSection?: (sectionId: string) => void;
+  onDeleteSection?: (sectionId: string) => void;
+  onRenameSection?: (sectionId: string, newTitle: string) => void;
+  componentIssuesMap?: Map<string, BuilderValidationIssue>;
   onAddSection: () => void;
   onOpenPreview: () => void;
   isApproved: boolean;
@@ -134,7 +141,14 @@ export const StudioPanels: React.FC<StudioPanelsProps> = ({
   onInsertAdminPack,
   onInsertContentItem,
   sections,
+  selectedSectionId,
+  selectedComponentId,
   onSelectSection,
+  onSelectComponent,
+  onDuplicateSection,
+  onDeleteSection,
+  onRenameSection: _onRenameSection,
+  componentIssuesMap,
   onAddSection,
   onOpenPreview: _onOpenPreview,
   isApproved,
@@ -147,9 +161,35 @@ export const StudioPanels: React.FC<StudioPanelsProps> = ({
   const isAdminUser = currentUser?.role === 'Admin';
   const [templateSearch, setTemplateSearch] = useState('');
   const [favoriteTemplates, setFavoriteTemplates] = useState<Record<string, boolean>>({});
-  const [filterMode, setFilterMode] = useState<'all' | 'firm' | 'favorites'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'favorites'>('all');
   const [dataFieldSearch, setDataFieldSearch] = useState('');
   const [selectedDataFieldCategory, setSelectedDataFieldCategory] = useState<string>('All');
+  const [outlineSearch, setOutlineSearch] = useState('');
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(sections.map((section) => section.id)));
+
+  useEffect(() => {
+    setExpandedSections((current) => {
+      const validIds = new Set(sections.map((section) => section.id));
+      const next = new Set([...current].filter((id) => validIds.has(id)));
+      sections.forEach((section) => {
+        if (!current.size) next.add(section.id);
+      });
+      if (selectedSectionId) next.add(selectedSectionId);
+      return next;
+    });
+  }, [sections, selectedSectionId]);
+
+  const filteredOutlineSections = useMemo(() => {
+    const query = outlineSearch.trim().toLowerCase();
+    if (!query) return sections;
+    return sections.filter((section) =>
+      section.title.toLowerCase().includes(query) ||
+      section.components?.some((component: any) =>
+        String(component.label || '').toLowerCase().includes(query) ||
+        String(component.type || '').toLowerCase().includes(query),
+      ),
+    );
+  }, [outlineSearch, sections]);
 
   const categoriesList = ['All', 'General', 'People / HR', 'Finance', 'Operations', 'Technology', 'Project Management', 'Compliance / Risk'];
 
@@ -185,7 +225,7 @@ export const StudioPanels: React.FC<StudioPanelsProps> = ({
   });
 
   return (
-    <div className="w-full sm:w-80 bg-slate-50 border-r border-slate-200/90 flex flex-col h-full overflow-y-auto shrink-0 select-none">
+    <div className="w-full min-w-0 bg-slate-50 border-r border-slate-200/90 flex flex-col h-full overflow-y-auto select-none">
       {/* Tab 1: TEMPLATES PANEL */}
       {activeTab === 'templates' && (
         <div className="p-4 space-y-4">
@@ -237,15 +277,6 @@ export const StudioPanels: React.FC<StudioPanelsProps> = ({
                 }`}
               >
                 All
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode('firm')}
-                className={`flex-1 py-1 text-center rounded-lg transition-all cursor-pointer ${
-                  filterMode === 'firm' ? 'bg-white text-indigo-700 shadow-2xs font-bold' : ''
-                }`}
-              >
-                Firm
               </button>
               <button
                 type="button"
@@ -376,16 +407,19 @@ export const StudioPanels: React.FC<StudioPanelsProps> = ({
           </div>
 
           <div className="space-y-2">
-            {[
-              { type: 'heading', label: 'Section Title Heading', subtitle: 'Large bold section header' },
-              { type: 'heading', label: 'Subheading Title', subtitle: 'Medium subsection title' },
-              { type: 'paragraph', label: 'Instructional Text', subtitle: 'Help text for users filling template' },
-              { type: 'paragraph', label: 'Important Notice Banner', subtitle: 'Highlighted information block' },
-            ].map((p, idx) => (
+            {([
+              { type: 'heading', label: 'Document Title', subtitle: 'Main title shown at the top of a report', headingLevel: 'h1' },
+              { type: 'heading', label: 'Heading 1', subtitle: 'Primary section heading', headingLevel: 'h1' },
+              { type: 'heading', label: 'Heading 2', subtitle: 'Subsection heading', headingLevel: 'h2' },
+              { type: 'heading', label: 'Heading 3', subtitle: 'Detailed subsection heading', headingLevel: 'h3' },
+              { type: 'paragraph', label: 'Body Text', subtitle: 'Instructions, explanations, or standard wording', paragraphStyle: 'body' },
+              { type: 'paragraph', label: 'Instruction', subtitle: 'Helpful guidance for people completing the report', paragraphStyle: 'instruction' },
+              { type: 'paragraph', label: 'Caption', subtitle: 'Small supporting text below or beside content', paragraphStyle: 'caption' },
+            ] as const).map((p, idx) => (
               <button
                 key={idx}
                 type="button"
-                onClick={() => onAddTextPreset(p as any)}
+                onClick={() => onAddTextPreset(p)}
                 className="w-full p-3 bg-white hover:bg-indigo-50/50 border border-slate-200 hover:border-indigo-400 rounded-2xl text-left cursor-pointer transition-all space-y-0.5 group"
               >
                 <div className="flex items-center justify-between">
@@ -417,24 +451,78 @@ export const StudioPanels: React.FC<StudioPanelsProps> = ({
             )}
           </div>
 
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={outlineSearch}
+              onChange={(event) => setOutlineSearch(event.target.value)}
+              placeholder="Search sections and fields"
+              aria-label="Search document outline"
+              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+
           <div className="space-y-2">
-            {sections.map((sec, idx) => (
-              <div
-                key={sec.id}
-                onClick={() => onSelectSection(sec.id)}
-                className="p-3 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center justify-between cursor-pointer transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono">
-                    Sec {idx + 1}
-                  </span>
-                  <span>{sec.title}</span>
+            {filteredOutlineSections.map((sec) => {
+              const isExpanded = expandedSections.has(sec.id);
+              const issueCount = (sec.components || []).filter((component: any) => componentIssuesMap?.has(component.id)).length;
+              return (
+                <div key={sec.id} className={`bg-white border rounded-xl overflow-hidden transition-colors ${selectedSectionId === sec.id ? 'border-indigo-400 ring-2 ring-indigo-500/10' : 'border-slate-200'}`}>
+                  <div className="flex items-center gap-1 p-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedSections((current) => {
+                        const next = new Set(current);
+                        if (next.has(sec.id)) next.delete(sec.id); else next.add(sec.id);
+                        return next;
+                      })}
+                      aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${sec.title}`}
+                      aria-expanded={isExpanded}
+                      className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg cursor-pointer"
+                    >
+                      <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelectSection(sec.id)}
+                      className="flex-1 min-w-0 text-left cursor-pointer"
+                      aria-current={selectedSectionId === sec.id ? 'true' : undefined}
+                    >
+                      <span className="block text-xs font-bold text-slate-800 truncate">{sec.title}</span>
+                      <span className="text-[10px] text-slate-400 font-normal">{sec.components?.length || 0} {(sec.components?.length || 0) === 1 ? 'element' : 'elements'}</span>
+                    </button>
+                    {issueCount > 0 && <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full">{issueCount} Issues</span>}
+                    {!isApproved && onDuplicateSection && (
+                      <button type="button" onClick={() => onDuplicateSection(sec.id)} aria-label={`Duplicate ${sec.title}`} title="Duplicate section" className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg cursor-pointer">+</button>
+                    )}
+                    {!isApproved && onDeleteSection && sections.length > 1 && (
+                      <button type="button" onClick={() => onDeleteSection(sec.id)} aria-label={`Delete ${sec.title}`} title="Delete section" className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer">×</button>
+                    )}
+                  </div>
+                  {isExpanded && (
+                    <div className="border-t border-slate-100 px-3 py-2 space-y-1">
+                      {(sec.components || []).map((component: any) => {
+                        const toolboxItem = TOOLBOX_ITEMS.find((item) => item.type === component.type);
+                        return (
+                          <button
+                            key={component.id}
+                            type="button"
+                            onClick={() => onSelectComponent?.(sec.id, component.id, true)}
+                            className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left cursor-pointer transition-colors ${selectedComponentId === component.id ? 'bg-indigo-50 text-indigo-800' : 'hover:bg-slate-50 text-slate-700'}`}
+                          >
+                            <span className="shrink-0 text-slate-400">{toolboxItem?.icon}</span>
+                            <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">{component.label || toolboxItem?.label || component.type}</span>
+                            {componentIssuesMap?.has(component.id) && <span className="text-amber-600 text-[10px] font-bold">!</span>}
+                          </button>
+                        );
+                      })}
+                      {(sec.components || []).length === 0 && <p className="px-2 py-1 text-[10px] text-slate-400">Empty section</p>}
+                    </div>
+                  )}
                 </div>
-                <span className="text-[10px] text-slate-400 font-normal">
-                  {sec.components?.length || 0} fields
-                </span>
-              </div>
-            ))}
+              );
+            })}
+            {filteredOutlineSections.length === 0 && <p className="text-xs text-slate-400 py-4 text-center">No matching outline items.</p>}
           </div>
         </div>
       )}

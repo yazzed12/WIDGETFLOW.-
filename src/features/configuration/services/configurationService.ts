@@ -27,6 +27,7 @@ export const configurationService = {
   activeRoles: () => safe(() => configurationRepository.activeRoles()),
   effectiveConfig: () => safe(() => configurationRepository.effectiveConfig()),
   features: () => safe(() => configurationRepository.features()),
+  currentFeatureAccess: (featureKey: string) => safe(() => configurationRepository.currentFeatureAccess(featureKey)),
   elements: () => safe(() => configurationRepository.elements()),
   contentLibrary: () => safe(() => configurationRepository.contentLibrary()),
   operationalContentLibrary: () => safe(() => configurationRepository.operationalContentLibrary()),

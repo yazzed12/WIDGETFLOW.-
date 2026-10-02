@@ -3,6 +3,7 @@ import { sanitizeParagraphHtml, isSafeUrl } from '../../shared/display-tools/par
 import {
   Bold,
   Italic,
+  Underline,
   List,
   ListOrdered,
   Link as LinkIcon,
@@ -124,6 +125,16 @@ export const RichParagraphEditor: React.FC<RichParagraphEditorProps> = ({ value,
               className="p-1.5 hover:bg-white hover:text-indigo-600 rounded-lg transition-colors cursor-pointer"
             >
               <Italic className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              aria-label="Format underlined text"
+              onClick={() => insertTag('<u>', '</u>')}
+              title="Underline"
+              className="p-1.5 hover:bg-white hover:text-indigo-600 rounded-lg transition-colors cursor-pointer"
+            >
+              <Underline className="w-3.5 h-3.5" />
             </button>
 
             <div className="w-px h-4 bg-slate-300 mx-0.5" />

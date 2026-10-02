@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const read = (path) => readFileSync(path, 'utf8');
+const sidebar = read('src/components/layout/Sidebar.tsx');
+const app = read('src/App.tsx');
+const page = read('src/pages/InsightsPage.tsx');
+const repository = read('src/features/insights/templateInsightsRepository.ts');
+const access = read('src/features/insights/templateInsightsAccess.ts');
+const featureFiles = [page, repository, read('src/features/insights/templateInsightsMapper.ts'), read('src/features/insights/templateInsightsService.ts')].join('\n');
+
+assert.match(sidebar, /id: 'insights'.*canAccessInsights\(insightsAccess\)/s, 'navigation uses centralized effective feature access');
+assert.match(app, /case 'insights':[\s\S]*canAccessInsights\(insightsAccess\)/, 'view itself is guarded before mounting the page');
+assert.match(access, /status === 'ready' && access\.insightsAllowed/, 'access gate fails closed until backend access resolution is ready');
+assert.doesNotMatch(access + sidebar + app, /role\s*===|roleKey|role_key|Director|Manager|Protected Admin/, 'authorization does not depend on role names');
+assert.match(repository, /get_template_usage_insights/);
+assert.match(repository, /get_template_usage_insight_detail/);
+for (const parameter of ['p_start_at', 'p_end_at', 'p_category_id', 'p_search', 'p_usage_state', 'p_sort', 'p_sort_direction', 'p_limit', 'p_offset']) assert.ok(repository.includes(parameter), `main RPC receives ${parameter}`);
+assert.ok(repository.includes('p_template_id'), 'detail RPC receives the selected template UUID');
+assert.match(repository, /options\.limit > 100/, 'page size is capped at 100');
+assert.match(repository, /options\.offset/, 'offset is sent to the server contract');
+assert.doesNotMatch(featureFiles, /\.from\(['"]reports['"]\)|\.from\(['"]templates['"]\)|\.reports\b|reports\.filter\(/, 'analytics are not derived from AppContext report/template arrays or direct table scans');
+assert.doesNotMatch(featureFiles, /service.role|service_role|VITE_SUPABASE_SERVICE/, 'no service-role browser logic exists');
+assert.doesNotMatch(page, /adoption\s*(score|rate|percentage)|top performing|underperforming|best template|worst template/i, 'no evaluative score/rate language is introduced');
+assert.match(page, /Never Used \(lifetime\)/);
+assert.match(page, /Current Status of Reports Created in Selected Period/);
+assert.match(page, /const selectTemplate = \(template: TemplateUsageRow\) => setSelectedTemplate\(template\)/, 'template detail opens only from explicit row selection');
+assert.match(page, /if \(!allowed \|\| !selectedTemplateId\) return;[\s\S]*getTemplateUsageInsightDetail\(selectedTemplateId/, 'detail RPC is conditional on resolved access and one selected Template');
+assert.match(page, /getTemplateUsageInsightDetail\(selectedTemplateId, \{ startAt: range\.startAt, endAt: range\.endAt \}\)/, 'detail RPC receives the selected UUID and same date range');
+assert.match(page, /version\.templateVersionId/, 'version usage keys use exact templateVersionId values');
+assert.match(page, /Showing \{startRow\}–\{endRow\} of/, 'page communicates current window vs total');
+console.log('Phase 4C Template Insights static checks passed.');

@@ -1,8 +1,15 @@
-import type { TemplateComponent, BuilderValidationIssue } from '../../types';
+import React from 'react';
+import type { TemplateComponent, BuilderValidationIssue, TemplateTheme } from '../../types';
 import { TOOLBOX_ITEMS } from './BuilderToolbox';
 import { GripVertical, Copy, Trash2, Tag, AlertCircle, DollarSign, Percent, Calendar, Paperclip, CheckCircle } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
+import { useDndContext } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { getLayoutWidthPercent, clampComponentLayoutWidthPercent } from '../../shared/layout';
+import { resolveElementAppearance } from '../../shared/themeResolver';
+import { resolveComponentStyle } from '../../shared/themeResolver';
+import { resolveAssetUrl } from '../../shared/display-tools/displayUtils';
+import { AuthenticatedAssetImage } from '../common/AuthenticatedAssetImage';
 
 interface BuilderComponentProps {
   component: TemplateComponent;
@@ -11,7 +18,28 @@ interface BuilderComponentProps {
   onSelect: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onResize: (widthPercent: number) => void;
+  canResize?: boolean;
+  sectionId: string;
+  componentIndex: number;
+  templateTheme?: TemplateTheme;
 }
+
+const BuilderImagePreview: React.FC<{ component: TemplateComponent }> = ({ component }) => {
+  const imageConfig = component.imageConfig || {};
+  const src = resolveAssetUrl(imageConfig.assetUrl || component.assetUrl, imageConfig.assetId || component.assetId);
+  const [failedSource, setFailedSource] = React.useState<string | null>(null);
+  const handleImageError = React.useCallback(() => {
+    setFailedSource(src);
+  }, [src]);
+  const failed = Boolean(src && failedSource === src);
+
+  if (!src || failed) {
+    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-[11px] text-slate-500">{failed ? "We couldn't load this image." : 'Upload an image to preview it here.'}</div>;
+  }
+
+  return <AuthenticatedAssetImage src={src} alt={imageConfig.altText || component.altText || component.label || 'Template image'} onAssetError={handleImageError} onError={handleImageError} className="max-h-40 max-w-full rounded-lg border border-slate-200 bg-white object-contain" />;
+};
 
 export const BuilderComponent: React.FC<BuilderComponentProps> = ({
   component,
@@ -20,58 +48,139 @@ export const BuilderComponent: React.FC<BuilderComponentProps> = ({
   onSelect,
   onDuplicate,
   onDelete,
+  onResize,
+  canResize = true,
+  sectionId,
+  componentIndex,
+  templateTheme,
 }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: component.id,
-    data: { component, isComponent: true },
+    data: { component, isComponent: true, sectionId, componentIndex },
   });
+  const { active, over } = useDndContext();
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
-  const layoutWidth = (component as any).layoutWidth || component.layout?.width || 'full';
+  const widthPercent = getLayoutWidthPercent(component);
+  const [draftWidthPercent, setDraftWidthPercent] = React.useState(widthPercent);
+  const draftWidthRef = React.useRef(widthPercent);
+  const [isResizing, setIsResizing] = React.useState(false);
+  const resizeStart = React.useRef<{ x: number; width: number; container: number; direction: 'left' | 'right' } | null>(null);
 
-  const getColSpanClass = (width: string) => {
-    switch (width) {
-      case 'half':
-        return 'col-span-12 sm:col-span-6';
-      case 'third':
-        return 'col-span-12 sm:col-span-4';
-      case 'full':
-      default:
-        return 'col-span-12';
+  React.useEffect(() => {
+    if (!isResizing) {
+      draftWidthRef.current = widthPercent;
+      setDraftWidthPercent(widthPercent);
     }
+  }, [widthPercent, isResizing]);
+
+  const beginResize = (event: React.PointerEvent<HTMLButtonElement>, direction: 'left' | 'right') => {
+    if (!isSelected || !canResize) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const element = event.currentTarget.closest('[data-builder-component]') as HTMLElement | null;
+    const container = element?.parentElement?.getBoundingClientRect().width || element?.getBoundingClientRect().width || 1;
+    resizeStart.current = { x: event.clientX, width: widthPercent, container, direction };
+    draftWidthRef.current = widthPercent;
+    setDraftWidthPercent(widthPercent);
+    setIsResizing(true);
   };
 
-  const colClass = getColSpanClass(layoutWidth);
+  React.useEffect(() => {
+    if (!isResizing) return;
+    const handleMove = (event: PointerEvent) => {
+      const start = resizeStart.current;
+      if (!start) return;
+      const delta = ((event.clientX - start.x) / start.container) * 100 * (start.direction === 'left' ? -1 : 1);
+      const nextWidth = clampComponentLayoutWidthPercent(component, start.width + delta);
+      draftWidthRef.current = nextWidth;
+      setDraftWidthPercent(nextWidth);
+    };
+    const handleUp = () => {
+      const finalWidth = clampComponentLayoutWidthPercent(component, draftWidthRef.current);
+      setIsResizing(false);
+      resizeStart.current = null;
+      if (finalWidth !== widthPercent) onResize(finalWidth);
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp, { once: true });
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+  }, [component, isResizing, onResize, widthPercent]);
+
+  const insertionSide = React.useMemo(() => {
+    if (!isOver || !active || !over || active.id === component.id) return null;
+    const activeRect = active.rect.current.translated || active.rect.current.initial;
+    const overRect = over.rect;
+    if (!activeRect || !overRect) return null;
+    const activeCenterX = activeRect.left + activeRect.width / 2;
+    const activeCenterY = activeRect.top + activeRect.height / 2;
+    const overCenterX = overRect.left + overRect.width / 2;
+    const overCenterY = overRect.top + overRect.height / 2;
+    const sameRow = Math.abs(activeCenterY - overCenterY) <= Math.max(activeRect.height, overRect.height) * 0.7;
+    return (sameRow ? activeCenterX < overCenterX : activeCenterY < overCenterY) ? 'before' : 'after';
+  }, [active, component.id, isOver, over]);
   const itemDef = TOOLBOX_ITEMS.find((t) => t.type === component.type);
+  const appearance = resolveElementAppearance(component);
+  const textStyle = component.type === 'heading' || component.type === 'paragraph'
+    ? resolveComponentStyle(component, templateTheme)
+    : null;
 
   const isContent = component.type === 'heading' || component.type === 'paragraph';
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
       onClick={(e) => {
         e.stopPropagation();
         onSelect();
       }}
-      className={`${colClass} relative group transition-all duration-150 cursor-pointer ${
-        isDragging ? 'opacity-30' : ''
-      }`}
+      data-builder-component="true"
+      className="wf-layout-item relative group transition-all duration-150 cursor-pointer"
+      style={{ '--wf-layout-width': `${draftWidthPercent}%`, ...style } as React.CSSProperties}
     >
       <div
         id={component.id}
         className={`p-3.5 rounded-xl border bg-white transition-all shadow-2xs relative ${
+          isDragging ? 'opacity-30' : ''
+        } ${
           validationIssue
             ? 'border-rose-500 ring-2 ring-rose-300 bg-rose-50/10 shadow-md z-10'
             : isSelected
             ? 'border-indigo-600 ring-2 ring-indigo-500/20 shadow-md z-10'
             : 'border-slate-200 hover:border-indigo-300 hover:shadow-xs'
         }`}
+        style={{
+          ...(appearance.backgroundColor ? { backgroundColor: appearance.backgroundColor } : {}),
+          ...(appearance.borderColor ? { borderColor: appearance.borderColor } : {}),
+          ...(appearance.borderWidth !== undefined ? { borderWidth: appearance.borderWidth } : {}),
+          ...(appearance.borderStyle ? { borderStyle: appearance.borderStyle } : {}),
+          ...(appearance.borderRadius !== undefined ? { borderRadius: appearance.borderRadius } : {}),
+          ...(appearance.padding !== undefined ? { padding: appearance.padding } : {}),
+          ...(appearance.textAlign ? { textAlign: appearance.textAlign } : {}),
+        }}
       >
+        {insertionSide && (
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute left-0 right-0 z-30 h-1 rounded-full bg-indigo-500 shadow-[0_0_0_3px_rgba(99,102,241,0.16)] ${insertionSide === 'before' ? '-top-2' : '-bottom-2'}`}
+          />
+        )}
+        {isSelected && canResize && !validationIssue && (
+          <>
+            <button type="button" aria-label="Resize element width from left" onPointerDown={(event) => beginResize(event, 'left')} className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 h-8 w-2 rounded-full bg-indigo-600/80 opacity-70 hover:opacity-100 cursor-ew-resize touch-none select-none" />
+            <button type="button" aria-label="Resize element width from right" onPointerDown={(event) => beginResize(event, 'right')} className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 z-20 h-8 w-2 rounded-full bg-indigo-600/80 opacity-70 hover:opacity-100 cursor-ew-resize touch-none select-none" />
+            {isResizing && (
+              <span className="absolute -top-7 right-0 z-20 rounded-md bg-indigo-700 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm" aria-live="polite">{Math.round(draftWidthPercent)}%</span>
+            )}
+          </>
+        )}
         {/* Header Bar: Drag Handle, Icon, Label & Key */}
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 overflow-hidden">
@@ -113,9 +222,6 @@ export const BuilderComponent: React.FC<BuilderComponentProps> = ({
               </span>
             )}
 
-            <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded uppercase">
-              {layoutWidth}
-            </span>
           </div>
         </div>
 
@@ -130,17 +236,20 @@ export const BuilderComponent: React.FC<BuilderComponentProps> = ({
             switch (component.type) {
               case 'heading':
                 return (
-                  <div className="py-1 border-b border-slate-200">
-                    <span className="text-sm font-bold text-slate-900">{component.label}</span>
+                  <div className="py-1 border-b border-slate-200" style={textStyle ? { fontFamily: textStyle.fontFamily, fontSize: textStyle.fontSize, fontWeight: textStyle.fontWeight, color: textStyle.color, textAlign: textStyle.textAlign, lineHeight: textStyle.lineHeight, letterSpacing: textStyle.letterSpacing } : undefined}>
+                    <span className="tracking-tight">{component.label}</span>
                   </div>
                 );
 
               case 'paragraph':
                 return (
-                  <div className="p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs text-indigo-950 font-medium">
+                  <div className="p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs text-indigo-950 font-medium" style={textStyle ? { fontFamily: textStyle.fontFamily, fontSize: textStyle.fontSize, fontWeight: textStyle.fontWeight, color: textStyle.color, textAlign: textStyle.textAlign, lineHeight: textStyle.lineHeight, letterSpacing: textStyle.letterSpacing } : undefined}>
                     {component.label}
                   </div>
                 );
+
+              case 'image':
+                return <BuilderImagePreview component={component} />;
 
               case 'textarea':
                 return (

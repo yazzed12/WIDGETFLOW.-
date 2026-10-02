@@ -35,11 +35,12 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
   const [showCapacityConfirm, setShowCapacityConfirm] = useState(false);
   const [capacityConfirmed, setCapacityConfirmed] = useState(false);
   const isSupabaseReport = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(report.id);
+  const isUploadedReport = report.sourceType === 'uploaded';
   const filteredRecipients = useMemo(() => { const q = searchTerm.trim().toLowerCase(); return availableRecipients.filter((u) => !q || `${u.name} ${u.email} ${u.role}`.toLowerCase().includes(q)); }, [availableRecipients, searchTerm]);
 
   // Check template requirements for Sender Signature
-  const template = report.templateSnapshot || templates.find((t) => t.id === report.templateId);
-  const signatureFields = resolveEffectiveReportSignatureFields(template, report.signatureConfigurations ?? []);
+  const template = !isUploadedReport ? report.templateSnapshot || templates.find((t) => t.id === report.templateId) : undefined;
+  const signatureFields = isUploadedReport ? [] : resolveEffectiveReportSignatureFields(template, report.signatureConfigurations ?? []);
   const receiverFields = signatureFields.filter((field) => field.signerContext === 'receiver').map((field) => {
     const configuredRequiredRole = field.requiredRoleKey ?? '';
     const requiredRole = resolveCanonicalRecipientRoleKey(configuredRequiredRole, availableRecipients);
@@ -61,7 +62,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
   const sendNow = async () => {
     setIsSubmitting(true);
     try {
-      await sendReport(report.id, selectedRecipientIds, senderNote.trim(), Object.entries(signatureMappings).filter(([, key]) => key).map(([recipientUserId, signatureFieldKey]) => ({ recipientUserId, signatureFieldKey })));
+      await sendReport(report.id, selectedRecipientIds, senderNote.trim(), isUploadedReport ? [] : Object.entries(signatureMappings).filter(([, key]) => key).map(([recipientUserId, signatureFieldKey]) => ({ recipientUserId, signatureFieldKey })), report.sourceType);
       onClose();
     } catch (err: any) { setError(normalizeError(err, 'send').message); }
     finally { setIsSubmitting(false); }
@@ -74,7 +75,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
       setError('Please select a recipient.');
       return;
     }
-    if (receiverFields.length > 0 && selectedRecipientIds.length < receiverFields.length) {
+    if (!isUploadedReport && receiverFields.length > 0 && selectedRecipientIds.length < receiverFields.length) {
       const additionalRecipients = receiverFields.length - selectedRecipientIds.length;
       setError(`This template requires ${receiverFields.length} recipient signature${receiverFields.length === 1 ? '' : 's'}. You currently selected ${selectedRecipientIds.length}. Add at least ${additionalRecipients} more recipient${additionalRecipients === 1 ? '' : 's'} or choose another template.`);
       return;
@@ -82,7 +83,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
 
     // Sender signature remains part of the legacy workflow only. Supabase
     // Phase 4B.3 Send is intentionally limited to the trusted send RPC.
-    if (!isSupabaseReport && hasSenderSigRequirement && !activeSenderSig) {
+    if (!isUploadedReport && !isSupabaseReport && hasSenderSigRequirement && !activeSenderSig) {
       try {
         const sigProf = await apiService.getUserSignatureProfile();
         if (!sigProf) {
@@ -100,16 +101,16 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
       return;
     }
 
-    const missingRequired = receiverFields.filter((field: any) => field.required && !Object.values(signatureMappings).includes(field.key));
+    const missingRequired = isUploadedReport ? [] : receiverFields.filter((field: any) => field.required && !Object.values(signatureMappings).includes(field.key));
     if (missingRequired.length > 0) { setError(`Map required receiver signature field(s): ${missingRequired.map((f: any) => f.label).join(', ')}`); return; }
-    if (viewOnlyRecipients.length > 0 && !capacityConfirmed) { setShowCapacityConfirm(true); return; }
+    if (!isUploadedReport && viewOnlyRecipients.length > 0 && !capacityConfirmed) { setShowCapacityConfirm(true); return; }
     // Direct send if no sender signature required or already active
     await sendNow();
   };
 
   return (
     <>
-      {showCapacityConfirm && (
+      {!isUploadedReport && showCapacityConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4">
             <h3 className="text-base font-bold text-slate-900">Not all recipients can sign this report</h3>
@@ -144,7 +145,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
           {/* Body */}
           <form onSubmit={handleSendSubmit} className="p-6 space-y-5 text-xs">
             {/* Sender Signature Requirement Notice */}
-            {!isSupabaseReport && hasSenderSigRequirement && !activeSenderSig && (
+            {!isUploadedReport && !isSupabaseReport && hasSenderSigRequirement && !activeSenderSig && (
               <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-amber-900">
                 <PenTool className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div>
@@ -206,7 +207,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
                 ))}
               </div>
 
-              {selectedRecipientIds.length > 0 && receiverFields.length > 0 && (
+              {!isUploadedReport && selectedRecipientIds.length > 0 && receiverFields.length > 0 && (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs font-bold text-slate-800">Signature Assignments</p>
                   {receiverFields.map((field: any) => {
@@ -293,7 +294,7 @@ export const SendReportModal: React.FC<SendReportModalProps> = ({ report, onClos
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Send className="w-4 h-4" />
-                <span>{!isSupabaseReport && hasSenderSigRequirement && !activeSenderSig ? 'Sign & Send' : 'Send Report'}</span>
+                <span>{!isUploadedReport && !isSupabaseReport && hasSenderSigRequirement && !activeSenderSig ? 'Sign & Send' : 'Send Report'}</span>
               </button>
             </div>
           </form>

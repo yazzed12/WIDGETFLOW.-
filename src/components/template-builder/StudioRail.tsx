@@ -18,6 +18,10 @@ import { useApp } from '../../context/AppContext';
 
 export type StudioTab = 'templates' | 'elements' | 'content-library' | 'packs' | 'text' | 'sections' | 'data-fields' | 'tools' | 'workflow';
 
+// Workflow code remains available for its future canonical implementation, but
+// it is intentionally not exposed in the normal Studio surface today.
+export const HIDDEN_NORMAL_STUDIO_TABS = new Set<StudioTab>(['workflow']);
+
 interface StudioRailProps {
   mode?: 'template' | 'admin-pack';
   activeTab: StudioTab | null;
@@ -54,6 +58,7 @@ export const StudioRail: React.FC<StudioRailProps> = ({
   const isAdminUser = currentUser?.role === 'Admin';
   const adminPackTabs = new Set<StudioTab>(['elements', 'content-library', 'text', 'sections', 'data-fields']);
   const visibleItems = STUDIO_RAIL_ITEMS.filter((item) =>
+    (mode === 'admin-pack' || !HIDDEN_NORMAL_STUDIO_TABS.has(item.id)) &&
     (mode === 'admin-pack' || isAdminUser || isFeatureEnabled(item.featureKey)) &&
     (mode !== 'admin-pack' || adminPackTabs.has(item.id)) &&
     (mode === 'admin-pack' || !allowedTabs || allowedTabs.has(item.id))

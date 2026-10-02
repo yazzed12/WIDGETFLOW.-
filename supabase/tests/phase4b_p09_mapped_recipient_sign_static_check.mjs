@@ -1,36 +1,53 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 
-const sql = fs.readFileSync(new URL('../migrations/041_report_mapped_recipient_sign.sql', import.meta.url), 'utf8');
+const sql = fs.readFileSync(
+  new URL('../migrations/089_unified_signature_definition_and_report_customization.sql', import.meta.url),
+  'utf8',
+);
 
-assert.match(sql, /040_report_signature_mapping_send/);
-assert.match(sql, /create or replace function public\.sign_report/);
-assert.match(sql, /public\.report_signature_assignments/);
-assert.match(sql, /report_assignment_id = assignment_row\.id/);
-assert.match(sql, /send_cycle_id = report_row\.current_send_cycle_id/);
-assert.match(sql, /recipient_user_id = actor\.user_id/);
-assert.match(sql, /public\.signature_profiles/);
-assert.match(sql, /is_active = true/);
-assert.match(sql, /public\.report_values/);
-assert.match(sql, /mapping_row\.signature_field_key/);
-assert.match(sql, /template_version_row\.schema_snapshot/);
-assert.match(sql, /signature_role <> 'receiver'|signature_role <> 'receiver'/);
-assert.match(sql, /public\.report_signature_events/);
-assert.match(sql, /content_hash/);
-assert.match(sql, /verification_id/);
-assert.match(sql, /assignment_status = 'signed'/);
-assert.match(sql, /total_mapped_signers/);
-assert.match(sql, /signed_mapped_signers/);
-assert.match(sql, /total_mapped_signers > 0/);
-assert.match(sql, /REPORT_SIGNED/);
-assert.match(sql, /REPORT_FULLY_SIGNED/);
-assert.match(sql, /security definer/i);
-assert.match(sql, /set search_path = ''/);
-assert.match(sql, /grant execute on function public\.sign_report[\s\S]*to authenticated/);
-assert.match(sql, /revoke all on function public\.sign_report[\s\S]*from public, anon, authenticated/);
-assert.doesNotMatch(sql, /create or replace function public\.send_report/i);
-assert.doesNotMatch(sql, /create or replace function public\.return_report/i);
-assert.doesNotMatch(sql, /assignment_sequence/);
-assert.doesNotMatch(sql, /first empty|first receiver|fifo/i);
+const start = sql.search(/create\s+or\s+replace\s+function\s+public\.sign_report\s*\(/i);
+assert.notEqual(start, -1, 'migration 089 must define the current public sign_report contract');
+const open = sql.indexOf('$function$', start);
+const close = sql.indexOf('$function$', open + '$function$'.length);
+assert.notEqual(close, -1, 'sign_report body must terminate');
+const sign = sql.slice(start, close + '$function$'.length);
 
-console.log('phase4b_p09_mapped_recipient_sign_static_check: PASS');
+assert.match(sql, /088_optional_signature_customization_semantics/);
+assert.match(sign, /report_effective_signature_definitions/);
+assert.match(sign, /current_user_is_active/);
+assert.match(sign, /SELF_SIGN_NOT_ALLOWED/);
+assert.match(sign, /report_row\.status\s*<>\s*'sent'/);
+assert.match(sign, /current_send_cycle_id/);
+assert.match(sign, /assignment_row\.recipient_user_id\s*<>\s*actor\.user_id/);
+assert.match(sign, /ASSIGNMENT_NOT_OWNED/);
+assert.match(sign, /assignment_status\s*<>\s*'pending'/);
+assert.match(sign, /SEND_CYCLE_NOT_CURRENT/);
+assert.match(sign, /cycle_row\.status\s*<>\s*'active'/);
+assert.match(sign, /SEND_CYCLE_CONTENT_HASH_MISSING/);
+assert.match(sign, /report_signature_assignments/);
+assert.match(sign, /recipient_user_id\s*=\s*actor\.user_id/);
+assert.match(sign, /signature_role\s*<>\s*'receiver'/);
+assert.match(sign, /SIGNATURE_MAPPING_INVALID/);
+assert.match(sign, /required_role_key/);
+assert.match(sign, /signature_user_has_required_role/);
+assert.match(sign, /SIGNATURE_REQUIRED_ROLE_MISMATCH/);
+assert.match(sign, /signature_profiles/);
+assert.match(sign, /is_active/);
+assert.match(sign, /RECIPIENT_SIGNATURE_REQUIRED/);
+assert.match(sign, /signed_content_hash/);
+assert.match(sign, /cycle_row\.content_hash/);
+assert.match(sign, /report_signature_events/);
+assert.match(sign, /assignment_status\s*=\s*'signed'/);
+assert.match(sign, /REPORT_SIGNED/);
+assert.match(sign, /total_mapped\s*>\s*0\s+and\s+signed_mapped\s*=\s*total_mapped/);
+assert.match(sign, /status\s*=\s*'finalized'/);
+assert.match(sign, /status\s*=\s*'signed'/);
+assert.match(sign, /locked_at\s*=\s*statement_timestamp\(\)/);
+assert.match(sign, /REPORT_FULLY_SIGNED/);
+assert.match(sign, /security\s+definer/i);
+assert.match(sign, /set\s+search_path\s*=\s*''/i);
+assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.sign_report\(uuid,uuid,jsonb\)\s+from\s+public,\s*anon/i);
+assert.match(sql, /grant\s+execute\s+on\s+function\s+public\.sign_report\(uuid,uuid,jsonb\)\s+to\s+authenticated/i);
+
+console.log('phase4b_p09_mapped_recipient_sign_static_check: PASS (canonical migration 089)');

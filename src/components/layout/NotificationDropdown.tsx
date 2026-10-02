@@ -25,6 +25,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onCl
         return <MessageSquare className="w-4 h-4 text-blue-600 shrink-0" />;
       case 'approval_required':
       case 'template_review_requested':
+      case 'template_review_requested_delegated':
         return <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />;
       case 'template_returned':
         return <Clock className="w-4 h-4 text-amber-600 shrink-0" />;

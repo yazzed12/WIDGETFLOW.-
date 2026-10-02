@@ -35,3 +35,8 @@ server/uploads/
 supabase/.temp/
 
 .env.local
+.vercel
+.env*
+
+supabase 2/
+supabase/migrations.zip

@@ -47,7 +47,7 @@ export const ReportExplorer: React.FC<ReportExplorerProps> = ({
       const matchesStatus = statusFilter === 'all' || status.toLowerCase() === statusFilter.toLowerCase();
 
       const tplId = String(report.templateId || '');
-      const matchesTemplate = templateFilter === 'all' || tplId === templateFilter;
+      const matchesTemplate = templateFilter === 'all' || (report.sourceType === 'template' && tplId === templateFilter);
 
       return searchMatches && matchesStatus && matchesTemplate;
     });
@@ -165,7 +165,7 @@ export const ReportExplorer: React.FC<ReportExplorerProps> = ({
                     report.createdByName,
                     users
                   );
-                  const templateName = resolveTemplateName(
+                  const templateName = report.sourceType === 'uploaded' ? 'Uploaded Report' : resolveTemplateName(
                     report.templateId,
                     report.templateName,
                     templates
@@ -207,7 +207,7 @@ export const ReportExplorer: React.FC<ReportExplorerProps> = ({
                         <button
                           type="button"
                           onClick={(e) => {
-                            if (report.templateId && onNavigateToTemplate) {
+                            if (report.sourceType === 'template' && report.templateId && onNavigateToTemplate) {
                               e.stopPropagation();
                               onNavigateToTemplate(report.templateId);
                             }

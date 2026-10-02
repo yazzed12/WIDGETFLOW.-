@@ -24,3 +24,23 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Structured Canvas layout: continuous desktop widths, full-width mobile flow. */
+.wf-layout-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.wf-layout-item {
+  flex: 0 0 calc(var(--wf-layout-width, 100%) - 1rem);
+  width: calc(var(--wf-layout-width, 100%) - 1rem);
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .wf-layout-item {
+    flex-basis: 100% !important;
+    width: 100% !important;
+  }
+}

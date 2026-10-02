@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { WidgetTemplate } from '../types';
 import { matchesSearch } from '../features/search/searchMatcher';
+import { canReviewVisibleTemplate } from '../features/templates/templateApprovalVisibility';
 
 export const ApprovalsPage: React.FC = () => {
   const {
@@ -32,7 +33,9 @@ export const ApprovalsPage: React.FC = () => {
     rejectTemplate,
     returnTemplateForRevision,
     claimTemplateReview,
-    hasPermission,
+    hasTemplateApprovalPermission,
+    isDelegatedMode,
+    authorityContext,
   } = useApp();
 
   const pendingApprovals = getPendingApprovalsForUser();
@@ -105,13 +108,13 @@ export const ApprovalsPage: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-full flex items-center gap-1.5">
-            Role: {currentUser.role}
+            Role: {currentUser.role}{isDelegatedMode && authorityContext && ` · Acting as ${authorityContext.authority.roleName} for ${authorityContext.delegation?.delegatedByName}`}
           </span>
         </div>
       </div>
 
       {/* Summary Metrics Bar for Manager/Director */}
-      {hasPermission('template_approvals.view') && (
+      {hasTemplateApprovalPermission('template_approvals.view') && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
             <span className="text-xs font-medium text-slate-500 block">Pending Requests</span>
@@ -137,7 +140,7 @@ export const ApprovalsPage: React.FC = () => {
 
       {/* Main Inbox Container */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        {hasPermission('template_approvals.view') && (
+        {hasTemplateApprovalPermission('template_approvals.view') && (
           <div className="border-b border-slate-100 p-4">
             <div className="relative w-full md:w-80">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -145,7 +148,7 @@ export const ApprovalsPage: React.FC = () => {
             </div>
           </div>
         )}
-        {!hasPermission('template_approvals.view') ? (
+        {!hasTemplateApprovalPermission('template_approvals.view') ? (
           /* Employee Empty/Access State */
           <div className="p-12 text-center text-slate-500 text-xs space-y-3">
             <Inbox className="w-10 h-10 text-slate-300 mx-auto" />
@@ -168,11 +171,11 @@ export const ApprovalsPage: React.FC = () => {
           <div className="divide-y divide-slate-100">
             {filteredApprovals.map((req) => {
               const isUnclaimedQueueItem = !req.requestedApprovalFromUserId;
-              const canReviewThisTemplate =
-                req.status === 'Pending Approval' &&
-                req.createdById !== currentUser.id &&
-                (!req.requestedApprovalFromUserId || req.requestedApprovalFromUserId === currentUser.id) &&
-                hasPermission('template_approvals.view');
+              const canReviewThisTemplate = canReviewVisibleTemplate(
+                req,
+                currentUser.id,
+                hasTemplateApprovalPermission('template_approvals.view'),
+              );
 
               return (
                 <div
@@ -216,7 +219,7 @@ export const ApprovalsPage: React.FC = () => {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                    {isUnclaimedQueueItem && hasPermission('template_approvals.approve') && (
+                    {isUnclaimedQueueItem && hasTemplateApprovalPermission('template_approvals.approve') && (
                       <button
                         onClick={() => claimTemplateReview(req.id)}
                         className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
@@ -236,7 +239,7 @@ export const ApprovalsPage: React.FC = () => {
                           <span>Review</span>
                         </button>
 
-                        {hasPermission('template_approvals.reject') && (
+                        {hasTemplateApprovalPermission('template_approvals.reject') && (
                           <button
                             onClick={() => setRejectTargetTemplate(req)}
                             className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer border border-rose-200"
@@ -247,7 +250,7 @@ export const ApprovalsPage: React.FC = () => {
                           </button>
                         )}
 
-                        {hasPermission('template_approvals.reject') && hasPermission('template_approvals.approve') && (
+                        {hasTemplateApprovalPermission('template_approvals.reject') && (
                           <button
                             onClick={() => setReturnTargetTemplate(req)}
                             className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer border border-amber-200"
@@ -258,7 +261,7 @@ export const ApprovalsPage: React.FC = () => {
                           </button>
                         )}
 
-                        {hasPermission('template_approvals.approve') && (
+                        {hasTemplateApprovalPermission('template_approvals.approve') && (
                           <button
                             onClick={() => setConfirmApproveTemplate(req)}
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"

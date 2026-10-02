@@ -15,6 +15,7 @@ interface FileAttachmentControlProps {
   error?: string;
   reportId?: string;
   ensureReportId?: () => Promise<string>;
+  simulationMode?: boolean;
 }
 
 export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
@@ -26,6 +27,7 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
   error,
   reportId,
   ensureReportId,
+  simulationMode = false,
 }) => {
   const safeAttachmentError = (error: unknown, fallback: string): string => {
     const normalized = normalizeError(error);
@@ -102,6 +104,15 @@ export const FileAttachmentControl: React.FC<FileAttachmentControlProps> = ({
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  if (simulationMode) {
+    return (
+      <div className="p-3 rounded-xl border border-dashed border-indigo-200 bg-indigo-50/60 text-[11px] text-indigo-800" role="note">
+        File upload is available when filling a real report.
+        {attachment?.fileName ? <span className="block mt-1 text-slate-600">Current template value: {attachment.fileName}</span> : null}
+      </div>
+    );
+  }
 
   const handleFileSelected = async (file: File) => {
     setUploadError(null);

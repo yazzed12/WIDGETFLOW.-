@@ -2,6 +2,7 @@ import React from 'react';
 import type { WidgetTemplate } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { X, FileText, Sparkles, DollarSign, Users, BarChart3, Terminal, Layers, Calendar, User as UserIcon, Check } from 'lucide-react';
+import { canCreateTemplateBackedReport } from '../../features/delegations/effectiveAuthority';
 
 interface TemplateDetailModalProps {
   template: WidgetTemplate;
@@ -9,7 +10,7 @@ interface TemplateDetailModalProps {
 }
 
 export const TemplateDetailModal: React.FC<TemplateDetailModalProps> = ({ template, onClose }) => {
-  const { categories, openFillReportModal } = useApp();
+  const { categories, openFillReportModal, hasOperationalPermission } = useApp();
 
   const category = categories.find((c) => c.id === template.categoryId);
 
@@ -145,24 +146,30 @@ export const TemplateDetailModal: React.FC<TemplateDetailModalProps> = ({ templa
               <span>This is an official firm-wide approved report template. Clicking <strong>Use Template</strong> allows you to create a new report with your own data without modifying the template.</span>
             </div>
           </div>
+          {template.isPaused && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">This approved Template is temporarily paused and cannot be used for new Reports.</div>}
         </div>
 
         {/* Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
 
-          <button
+          {canCreateTemplateBackedReport(hasOperationalPermission) && <button
+            type="button"
             onClick={handleUseTemplate}
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+            disabled={template.isPaused}
+            title={template.isPaused ? 'This Template is paused for new Reports.' : undefined}
+            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
           >
             <FileText className="w-4 h-4" />
-            <span>Use Template</span>
-          </button>
+            <span>{template.isPaused ? 'Paused' : 'Use Template'}</span>
+          </button>}
         </div>
       </div>
     </div>

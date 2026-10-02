@@ -22,6 +22,7 @@ interface SignatureRendererProps {
   theme?: TemplateTheme;
   value?: any;
   reportId?: string;
+  simulationMode?: boolean;
 }
 
 type NormalizedPoint = { x: number; y: number };
@@ -68,6 +69,7 @@ export const SignatureRenderer: React.FC<SignatureRendererProps> = ({
   theme,
   value,
   reportId,
+  simulationMode = false,
 }) => {
   const shellStyle = resolveSignatureShellStyle(component, theme);
   const sigConfig = component.signatureConfig || {};
@@ -245,7 +247,9 @@ export const SignatureRenderer: React.FC<SignatureRendererProps> = ({
             : 'The report workflow resolves the assigned signer before signing.'}
         </p>
         <p className="text-[11px] text-slate-500 italic">
-          The actual signer and signature are shown only after an authorized workflow action.
+          {simulationMode
+            ? 'Signature action is evaluated during the real report workflow.'
+            : 'The actual signer and signature are shown only after an authorized workflow action.'}
         </p>
       </div>
     </div>

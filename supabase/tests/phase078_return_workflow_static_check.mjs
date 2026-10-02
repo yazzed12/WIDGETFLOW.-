@@ -40,7 +40,7 @@ const checks = [
   ['return action exposed in approval inbox', approvals.includes('ReturnTemplateModal') && approvals.includes('returnTemplateForRevision')],
   ['unclaimed role queue remains actionable', approvals.includes('canReviewThisTemplate') && approvals.includes('isUnclaimedQueueItem') && approvals.includes('!req.requestedApprovalFromUserId') && approvals.includes('returnTargetTemplate')],
   ['return action exposed in approval drawer', drawer.includes('ReturnTemplateModal') && drawer.includes('returnTemplateForRevision')],
-  ['return action follows assigned or unclaimed pending eligibility', drawer.includes('canReviewTemplate') && drawer.includes('!template.requestedApprovalFromUserId') && drawer.includes("template_approvals.reject")],
+  ['return action follows canonical visible-review eligibility', drawer.includes('canReviewTemplate = canReviewVisibleTemplate(') && drawer.includes("template_approvals.reject")],
   ['returned metadata mapped', serializer.includes('returnReason') && serializer.includes('returnedAt') && types.includes('returnReason?: string')],
   ['returned report metadata mapped', reportService.includes('returnReason: row.return_reason') && reportService.includes('returnedAt: row.returned_at')],
   ['safe return reason normalization', errors.includes('RETURN_REASON_REQUIRED')],

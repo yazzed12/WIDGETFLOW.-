@@ -110,6 +110,8 @@ export interface HeadingConfig {
   fontWeight?: 'normal' | 'medium' | 'bold' | 'extrabold' | 'theme' | string;
   fontFamily?: 'theme' | string;
   fontColor?: 'theme' | string;
+  lineHeight?: 'tight' | 'normal' | 'relaxed' | 'theme' | string;
+  letterSpacing?: 'tight' | 'normal' | 'wide' | 'theme' | string;
   italic?: boolean;
   underline?: boolean;
   alignment?: 'left' | 'center' | 'right';
@@ -128,6 +130,7 @@ export interface ParagraphConfig {
   fontColor?: 'theme' | string;
   lineHeight?: 'tight' | 'normal' | 'relaxed' | 'theme' | string;
   paragraphSpacing?: number;
+  letterSpacing?: 'tight' | 'normal' | 'wide' | 'theme' | string;
   textColor?: 'default' | 'slate' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'theme' | string;
 }
 
@@ -161,6 +164,16 @@ export interface ImageConfig {
   captionFontSize?: 'small' | 'medium' | 'large' | 'theme' | string;
   captionFontColor?: 'theme' | string;
   captionAlignment?: 'left' | 'center' | 'right';
+}
+
+export interface ComponentAppearance {
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: 0 | 1 | 2 | 3 | 4;
+  borderStyle?: 'solid' | 'dashed' | 'none';
+  borderRadius?: 0 | 4 | 8 | 12 | 16 | 24;
+  padding?: 0 | 4 | 8 | 12 | 16 | 24 | 32;
+  textAlign?: 'left' | 'center' | 'right';
 }
 
 export interface InfoBoxConfig {
@@ -319,6 +332,9 @@ export interface ReportSignatureRecord {
   signedByUserId: string;
   signedByName: string;
   signedByRole: string;
+  signedByRoleId?: string;
+  signedByRoleKey?: string;
+  signedByGovernanceLevel?: string | null;
   signatureRole: 'sender' | 'receiver';
   signatureMethod: 'uploaded' | 'drawn' | 'typed';
   typedName?: string;
@@ -328,6 +344,15 @@ export interface ReportSignatureRecord {
   signedContentHash?: string;
   isActive: boolean;
   signedAt: string;
+  delegationId?: string | null;
+  delegatedByUserId?: string | null;
+  delegatedByNameSnapshot?: string | null;
+  authorityRoleId?: string | null;
+  authorityRoleKeySnapshot?: string | null;
+  authorityRoleNameSnapshot?: string | null;
+  authorityGovernanceLevelSnapshot?: string | null;
+  delegationStartAtSnapshot?: string | null;
+  delegationEndAtSnapshot?: string | null;
 }
 
 export interface SignatureConfig {
@@ -375,6 +400,7 @@ export interface TemplateComponent {
   layoutWidth?: ComponentLayoutWidth;
   layout?: {
     width?: ComponentLayoutWidth;
+    widthPercent?: number;
   };
   order: number;
   section?: string;
@@ -407,6 +433,7 @@ export interface TemplateComponent {
   dividerConfig?: DividerConfig;
   spacerConfig?: SpacerConfig;
   imageConfig?: ImageConfig;
+  appearance?: ComponentAppearance;
   infoBoxConfig?: InfoBoxConfig;
   nestedComponents?: TemplateComponent[];
   kpiConfig?: KPIConfig;
@@ -433,6 +460,10 @@ export interface ReportTemplateField {
   section?: string;
   validation?: ComponentValidation;
   layoutWidth?: ComponentLayoutWidth;
+  layout?: {
+    width?: ComponentLayoutWidth;
+    widthPercent?: number;
+  };
   order?: number;
 
   // Freedom Pack properties
@@ -454,6 +485,7 @@ export interface ReportTemplateField {
   dividerConfig?: DividerConfig;
   spacerConfig?: SpacerConfig;
   imageConfig?: ImageConfig;
+  appearance?: ComponentAppearance;
   infoBoxConfig?: InfoBoxConfig;
   nestedComponents?: TemplateComponent[];
   kpiConfig?: KPIConfig;
@@ -580,6 +612,9 @@ export interface FooterConfig {
 export interface WidgetTemplate {
   id: string;
   templateDisplayId?: string;
+  supersedesTemplateId?: string;
+  /** Canonical business owner; distinct from createdById (the physical actor). */
+  operationalSubjectUserId?: string | null;
   name: string;
   description: string;
   categoryId: string;
@@ -589,6 +624,7 @@ export interface WidgetTemplate {
   createdAt: string;
   updatedAt: string;
   status: TemplateStatus;
+  isPaused?: boolean;
   tags: string[];
   version?: string | number;
   creationMethod?: 'blank' | 'template' | 'import';
@@ -640,21 +676,42 @@ export interface ReportAuditRecord {
   reportId: string;
   personName: string;
   role: Role;
-  action: "Created" | "Saved Draft" | "Completed" | "Sent" | "Commented" | "Returned" | "Resent" | "Signed" | "Rejected";
+  action: "Created" | "Saved Draft" | "Completed" | "Sent" | "Commented" | "Returned" | "Resent" | "Signed" | "Fully Signed" | "Rejected";
   timestamp: string;
   comment?: string;
+  actorUserId?: string | null;
+  actorRoleId?: string | null;
+  actorRoleKey?: string | null;
+  actorGovernanceLevel?: string | null;
+  delegationId?: string | null;
+  delegatedByUserId?: string | null;
+  delegatedByNameSnapshot?: string | null;
+  authorityRoleId?: string | null;
+  authorityRoleKeySnapshot?: string | null;
+  authorityRoleNameSnapshot?: string | null;
+  authorityGovernanceLevelSnapshot?: string | null;
+  delegationStartAtSnapshot?: string | null;
+  delegationEndAtSnapshot?: string | null;
 }
 
 export interface ReportInstance {
   id: string;
+  /** Canonical business owner; distinct from createdById (the physical actor). */
+  operationalSubjectUserId?: string | null;
+  /** True only after the authoritative report-detail query has completed. */
+  detailLoaded?: boolean;
   displayId?: string;
-  templateId: string;
-  templateName: string;
+  sourceType: 'template' | 'uploaded';
+  templateId?: string | null;
+  templateName?: string | null;
   templateVersion?: string | number;
-  templateVersionId?: string;
+  templateVersionId?: string | null;
+  currentDocumentVersionId?: string | null;
+  documentVersions?: ReportDocumentVersion[];
+  sendCycles?: ReportSendCycle[];
   title: string;
-  categoryId: string;
-  categoryName: string;
+  categoryId?: string | null;
+  categoryName?: string | null;
   createdById: string;
   createdByName: string;
   createdByRole: Role;
@@ -682,6 +739,25 @@ export interface ReportInstance {
   templateSnapshot?: any;
   auditHistory?: ReportAuditRecord[];
   workflowDetails?: any;
+}
+
+export interface ReportDocumentVersion {
+  id: string;
+  reportId: string;
+  assetId: string;
+  versionNumber: number;
+  filename: string;
+  mimeType: string;
+  byteSize?: number;
+  createdAt?: string;
+}
+
+export interface ReportSendCycle {
+  id: string;
+  cycleNumber: number;
+  documentVersionId?: string | null;
+  status?: string;
+  sentAt?: string;
 }
 
 export interface ReportSignatureConfiguration {
@@ -743,6 +819,9 @@ export interface RequestComment {
   userAvatar?: string;
   message: string;
   timestamp: string;
+  delegatedByName?: string | null;
+  authorityRoleName?: string | null;
+  delegationId?: string | null;
 }
 
 export interface ImportIssue {
@@ -751,10 +830,25 @@ export interface ImportIssue {
   fieldKey?: string;
 }
 
+export interface ImportDetection {
+  sectionId: string;
+  sectionTitle: string;
+  components: Array<{
+    id: string;
+    key: string;
+    label: string;
+    type: TemplateComponentType;
+    confidence: 'high' | 'needs_confirmation';
+    confidenceReason?: string;
+    source?: { page: number; x?: number; y?: number; width?: number; height?: number };
+    ignored?: boolean;
+  }>;
+}
+
 export interface ImportProposal {
   creationMethod: 'import';
   sourceFilename: string;
-  sourceType: 'docx' | 'xlsx' | 'json';
+  sourceType: 'docx' | 'xlsx' | 'json' | 'pdf';
   summary: {
     sectionCount: number;
     fieldCount: number;
@@ -762,6 +856,43 @@ export interface ImportProposal {
     confidence: 'High' | 'Medium' | 'Needs Review';
   };
   issues: ImportIssue[];
+  detections?: ImportDetection[];
+  sourceMetadata?: {
+    sizeBytes?: number;
+    sheetNames?: string[];
+    pageCount?: number;
+    pdfPages?: Array<{ page: number; width: number; height: number; textItemCount: number }>;
+    pdfWarnings?: string[];
+    pdfTitle?: string;
+    pdfAuthor?: string;
+    pdfCoverage?: {
+      extractedBlockCount: number;
+      mappedBlockCount: number;
+      needsReviewCount: number;
+      unmappedBlockCount: number;
+      ledger: Array<{
+        sourceId: string;
+        page: number;
+        text: string;
+        status: 'mapped' | 'needs_review' | 'unmapped' | 'ignored';
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+        normalized?: { x: number; y: number; width: number; height: number };
+      }>;
+      pages: Array<{ page: number; mapped: number; needsReview: number; unmapped: number; ignored: number }>;
+    };
+    docxCoverage?: {
+      extractedCellCount: number;
+      mappedCellCount: number;
+      sourceSampleCount: number;
+      unresolvedCount: number;
+      embeddedImageCount?: number;
+      images?: Array<{ sourceId: string; order: number; mimeType?: string; status: 'mapped_image' | 'source_sample_image' | 'unresolved_image' | 'ignored'; context?: string; semanticNodeIndex?: number; containerType?: string; tableRow?: number; tableCell?: number; previousText?: string; nextText?: string }>;
+      ledger: Array<{ sourceId: string; tableIndex?: number; row?: number; column?: number; text: string; status: 'mapped' | 'source_sample' | 'needs_review' | 'unresolved' | 'ignored' }>;
+    };
+  };
   template: Partial<WidgetTemplate>;
 }
 
@@ -770,7 +901,7 @@ export interface Notification {
   userId: string;
   title: string;
   message: string;
-  type: "approval_required" | "template_review_requested" | "template_returned" | "template_approved" | "template_rejected" | "comment_added" | "report_received" | "report_returned" | "report_signed" | "report_fully_signed" | "report_rejected";
+  type: "approval_required" | "template_review_requested" | "template_review_requested_delegated" | "template_returned" | "template_approved" | "template_rejected" | "comment_added" | "report_received" | "report_received_delegated" | "report_returned" | "report_signed" | "report_fully_signed" | "report_rejected";
   read: boolean;
   timestamp: string;
   readAt?: string;
@@ -779,11 +910,21 @@ export interface Notification {
   relatedReportId?: string;
   sendCycleId?: string;
   reportAssignmentId?: string;
+  delegationId?: string | null;
+  originalRecipientUserId?: string | null;
+  delegatedByUserId?: string | null;
+  delegatedByNameSnapshot?: string | null;
+  authorityRoleId?: string | null;
+  authorityRoleKeySnapshot?: string | null;
+  authorityRoleNameSnapshot?: string | null;
+  authorityGovernanceLevelSnapshot?: string | null;
+  delegationStartAtSnapshot?: string | null;
+  delegationEndAtSnapshot?: string | null;
 }
 
-export type ViewType = "dashboard" | "templates" | "my-requests" | "approvals" | "reports" | "notifications" | "organization-activity" | "sticky-notes" | "engine-proof" | "admin";
+export type ViewType = "dashboard" | "templates" | "my-requests" | "approvals" | "delegations" | "reports" | "insights" | "notifications" | "organization-activity" | "sticky-notes" | "engine-proof" | "admin";
 
-export type AdminViewType = "overview" | "data-control" | "features" | "studio-config" | "packs" | "elements" | "content-library" | "users" | "roles" | "categories" | "settings" | "audit";
+export type AdminViewType = "overview" | "data-control" | "features" | "insights-access" | "insights" | "delegations" | "studio-config" | "packs" | "elements" | "content-library" | "users" | "roles" | "categories" | "settings" | "audit";
 
 export interface OrganizationalRole {
   id: string;

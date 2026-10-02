@@ -2,16 +2,15 @@ import fs from 'node:fs';
 const read = (p) => fs.readFileSync(p, 'utf8');
 const app = read('src/context/AppContext.tsx');
 const page = read('src/pages/TemplatesPage.tsx');
-const repo = read('src/features/admin/repositories/adminReadRepository.ts');
 const migration = read('supabase/migrations/025_template_browser_read_grants.sql');
 const helper = read('src/shared/businessRevisionLabel.ts');
 const checks = [
-  ['independent template loading', app.includes('void refreshTemplates(); void refreshCategories();')],
+  ['categories load independently and templates load after authority verification', app.includes('useEffect(() => { void refreshCategories(); }, []);') && app.includes('refreshTemplates(true, workspaceRequest)')],
   ['template loading error state', app.includes('templatesError') && app.includes('templatesLoading')],
   ['page retry state', page.includes('Unable to load report templates.') && page.includes('Retry')],
   ['category fallback cards', page.includes('categories.length === 0') && page.includes('<TemplateCard')],
   ['category-name search', page.includes("categories.find((cat) => cat.id === t.categoryId)")],
-  ['tag search', page.includes('t.tags.some')],
+  ['tag search', page.includes('...t.tags') && page.includes('t.tags.includes(selectedTag)')],
   ['category counts aggregate templates', read('src/context/AppContext.tsx').includes("t.categoryId === catId && t.status === 'Approved'")],
   ['v1.0 hides suffix', helper.includes("revision > 0 ? `v${revision}` : ''")],
   ['025 authenticated select', migration.includes('grant select on table') && migration.includes('to authenticated')],

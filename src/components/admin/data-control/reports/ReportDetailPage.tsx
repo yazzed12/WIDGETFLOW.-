@@ -40,7 +40,7 @@ export const ReportDetailPage: React.FC<ReportDetailPageProps> = ({
   const [activeTab, setActiveTab] = useState<ReportTab>('data');
 
   // Resolve template canonical snapshot or matching template
-  const rawTemplate = (report as any).templateSnapshot
+  const rawTemplate = report.sourceType === 'template' && (report as any).templateSnapshot
     ? (report as any).templateSnapshot
     : templates.find((t) => t.id === report.templateId);
 
@@ -54,7 +54,7 @@ export const ReportDetailPage: React.FC<ReportDetailPageProps> = ({
   );
 
   const creatorName = resolveUserName(report.createdById, report.createdByName, users);
-  const templateName = resolveTemplateName(report.templateId, report.templateName, templates);
+  const templateName = report.sourceType === 'uploaded' ? 'Uploaded Report' : resolveTemplateName(report.templateId, report.templateName, templates);
 
   // Field definitions for human-readable labels in table
   const templateComponents: any[] = [];
@@ -114,7 +114,7 @@ export const ReportDetailPage: React.FC<ReportDetailPageProps> = ({
                     {creatorName}
                   </button>
                 </span>
-                <span className="flex items-center gap-1">
+                {report.sourceType === 'template' && <span className="flex items-center gap-1">
                   <FileCode2 className="w-3.5 h-3.5 text-slate-400" />
                   Template:{' '}
                   <button
@@ -128,7 +128,8 @@ export const ReportDetailPage: React.FC<ReportDetailPageProps> = ({
                   >
                     {templateName}
                   </button>
-                </span>
+                </span>}
+                {report.sourceType === 'uploaded' && <span className="rounded bg-indigo-50 px-2 py-1 text-indigo-700">Uploaded Report</span>}
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
                   Created {formatDate(report.createdAt)}

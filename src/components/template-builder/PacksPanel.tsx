@@ -10,7 +10,7 @@ interface PacksPanelProps {
 }
 
 export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => {
-  const [activeTab, setActiveTab] = useState<'standard' | 'my-packs'>('standard');
+  const activeTab = 'standard' as const;
   const [standardPacks, setStandardPacks] = useState<AdminPack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +26,7 @@ export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => 
       setStandardPacks(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('Failed to load standard packs:', err);
-      setError(err.message || 'Unable to load building block packs.');
+      setError('Unable to load Standard Packs. Please retry.');
     } finally {
       setLoading(false);
     }
@@ -55,11 +55,10 @@ export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => 
         </p>
       </div>
 
-      {/* Two Tab Concept: Standard Packs vs My Packs */}
+      {/* Standard Packs are currently the only supported creator-facing pack source. */}
       <div className="flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-[11px] font-semibold text-slate-600">
         <button
           type="button"
-          onClick={() => setActiveTab('standard')}
           className={`flex-1 py-1.5 text-center rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 text-[11px] ${
             activeTab === 'standard' ? 'bg-white text-indigo-700 shadow-2xs font-bold' : 'hover:text-slate-900'
           }`}
@@ -67,19 +66,6 @@ export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => 
           <span>Standard Packs</span>
           <span className="px-1.5 py-0.2 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-full">
             {standardPacks.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('my-packs')}
-          className={`flex-1 py-1.5 text-center rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 text-[11px] ${
-            activeTab === 'my-packs' ? 'bg-white text-indigo-700 shadow-2xs font-bold' : 'hover:text-slate-900'
-          }`}
-        >
-          <span>My Packs</span>
-          <span className="px-1.5 py-0.2 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-full">
-            0
           </span>
         </button>
       </div>
@@ -118,7 +104,7 @@ export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => 
       )}
 
       {/* Tab Content */}
-      {activeTab === 'standard' ? (
+      {activeTab === 'standard' && (
         error ? (
           <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-center space-y-2">
             <AlertTriangle className="w-5 h-5 text-rose-600 mx-auto" />
@@ -171,7 +157,7 @@ export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => 
                   <span className="text-[10px] font-mono text-slate-400">Admin Pack</span>
                   <button
                     type="button"
-                    onClick={() => onInsertAdminPack(pack)}
+                    onClick={() => setPreviewPack(pack)}
                     className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -182,14 +168,6 @@ export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => 
             ))}
           </div>
         )
-      ) : (
-        <div className="p-6 text-center bg-white rounded-2xl border border-slate-200 text-slate-400 space-y-1.5">
-          <Package className="w-6 h-6 text-slate-300 mx-auto mb-1" />
-          <p className="text-xs font-bold text-slate-700">No personal packs created yet.</p>
-          <p className="text-[10px] text-slate-400 leading-normal">
-            Custom building block bundles created by you will appear under My Packs.
-          </p>
-        </div>
       )}
 
       {/* Preview Modal */}
@@ -214,12 +192,17 @@ export const PacksPanel: React.FC<PacksPanelProps> = ({ onInsertAdminPack }) => 
               <div className="space-y-1 pt-2">
                 <h4 className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">Pack Building Blocks</h4>
                 <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                  {previewPack.items.map((item, idx) => (
+                  {previewPack.structure?.length ? previewPack.structure.map((section) => (
+                    <div key={section.id} className="p-2 bg-slate-50 rounded-lg">
+                      <div className="font-bold text-slate-800">{section.title}</div>
+                      <div className="mt-1 space-y-1 pl-2">
+                        {section.components.map((component) => <div key={component.id} className="text-[11px] text-slate-600">{component.label || component.type}</div>)}
+                      </div>
+                    </div>
+                  )) : previewPack.items.map((item, idx) => (
                     <div key={idx} className="p-2 bg-slate-50 rounded-lg flex items-center justify-between">
                       <span className="font-bold text-slate-800">{item.label}</span>
-                      <span className="text-[10px] text-slate-500 uppercase px-1.5 py-0.5 bg-slate-200 rounded font-mono">
-                        {item.sourceType}
-                      </span>
+                      <span className="text-[10px] text-slate-500 uppercase px-1.5 py-0.5 bg-slate-200 rounded font-mono">{item.sourceType}</span>
                     </div>
                   ))}
                 </div>

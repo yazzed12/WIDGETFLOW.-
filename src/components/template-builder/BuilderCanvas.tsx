@@ -1,14 +1,18 @@
-import type { TemplateSection, BuilderValidationIssue } from '../../types';
+import type { TemplateSection, BuilderValidationIssue, TemplateTheme } from '../../types';
 import { BuilderSection } from './BuilderSection';
 import { Plus } from 'lucide-react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
+import { resolveDocumentSpacing } from '../../shared/themeResolver';
 
 interface BuilderCanvasProps {
   sections: TemplateSection[];
+  templateTheme?: TemplateTheme;
+  selectedSectionId?: string | null;
   selectedComponentId: string | null;
   componentIssuesMap?: Map<string, BuilderValidationIssue>;
   onSelectComponent: (id: string) => void;
+  onSelectSection: (id: string) => void;
   onDuplicateComponent: (id: string) => void;
   onDeleteComponent: (id: string) => void;
   onRenameSection: (sectionId: string, newTitle: string) => void;
@@ -16,15 +20,20 @@ interface BuilderCanvasProps {
   onAddSection: () => void;
   onAddComponentToSection: (sectionId: string) => void;
   onSaveAsContentPack?: (section: TemplateSection) => void;
+  onResizeComponent: (componentId: string, widthPercent: number) => void;
+  canResize: boolean;
   onCanvasClick: () => void;
   isApproved: boolean;
 }
 
 export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   sections,
+  templateTheme,
+  selectedSectionId,
   selectedComponentId,
   componentIssuesMap,
   onSelectComponent,
+  onSelectSection,
   onDuplicateComponent,
   onDeleteComponent,
   onRenameSection,
@@ -32,6 +41,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   onAddSection,
   onAddComponentToSection,
   onSaveAsContentPack,
+  onResizeComponent,
+  canResize,
   onCanvasClick,
   isApproved,
 }) => {
@@ -41,33 +52,42 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   });
 
   const sectionIds = sections.map((s) => s.id);
+  const spacing = resolveDocumentSpacing(templateTheme);
+  const themeBackground = templateTheme?.bgColor || '#f1f5f9';
 
   return (
     <main
       onClick={onCanvasClick}
-      className="flex-1 bg-slate-100/70 p-6 overflow-y-auto min-h-0 space-y-6"
+      className="flex-1 min-w-0 w-full overflow-y-auto min-h-0 flex flex-col"
+      style={{ backgroundColor: themeBackground, padding: spacing.pagePadding, gap: spacing.sectionGap }}
     >
       <div
         ref={setCanvasDropRef}
-        className={`max-w-4xl mx-auto space-y-6 min-h-[500px] p-2 transition-all ${
+        className={`w-full max-w-none min-w-0 flex flex-col min-h-[500px] p-2 transition-all ${
           isOver ? 'ring-2 ring-indigo-500/30 rounded-2xl bg-indigo-50/10' : ''
         }`}
+        style={{ gap: spacing.sectionGap }}
       >
         <SortableContext items={sectionIds} strategy={verticalListSortingStrategy}>
           {sections.map((sec) => (
             <BuilderSection
               key={sec.id}
               section={sec}
+              templateTheme={templateTheme}
               totalSections={sections.length}
+              selectedSectionId={selectedSectionId}
               selectedComponentId={selectedComponentId}
               componentIssuesMap={componentIssuesMap}
               onSelectComponent={onSelectComponent}
+              onSelectSection={onSelectSection}
               onDuplicateComponent={onDuplicateComponent}
               onDeleteComponent={onDeleteComponent}
               onRenameSection={onRenameSection}
               onDeleteSection={onDeleteSection}
               onAddComponentToSection={onAddComponentToSection}
               onSaveAsContentPack={onSaveAsContentPack}
+              onResizeComponent={onResizeComponent}
+              canResize={canResize}
               isApproved={isApproved}
             />
           ))}

@@ -25,6 +25,7 @@ const TYPES = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'image/png',
   'image/jpeg',
   'image/jpg',
@@ -79,6 +80,13 @@ function extensionForMime(mime: string): string {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ) {
     return 'docx';
+  }
+
+  if (
+    mime ===
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ) {
+    return 'xlsx';
   }
 
   if (mime === 'image/png') return 'png';
@@ -321,32 +329,6 @@ async function getCanonicalPrincipal(
   };
 }
 
-async function hasAnyPermission(
-  verified: VerifiedCaller,
-  roleId: string,
-  permissionKeys: string[],
-  queryFailureCode?: 'ASSET_LINK_PERMISSION_QUERY_FAILED',
-): Promise<boolean> {
-  const { data, error } = await verified.adminClient
-    .from('role_permissions')
-    .select('permission_key')
-    .eq('role_id', roleId)
-    .in('permission_key', permissionKeys);
-
-  if (error) {
-    if (queryFailureCode) {
-      throw new ApiError(
-        500,
-        queryFailureCode,
-        'The operation could not be completed.',
-      );
-    }
-    throw databaseError(error);
-  }
-
-  return Boolean(data?.length);
-}
-
 async function requireReportAttachmentWriteAccess(
   verified: VerifiedCaller,
   principal: CanonicalPrincipal,
@@ -426,14 +408,8 @@ async function requireTemplateAssetWriteAccess(
   principal: CanonicalPrincipal,
   templateId: string,
 ): Promise<void> {
-  const permitted = await hasAnyPermission(
-    verified,
-    principal.roleId,
-    [
-      'templates.create',
-      'templates.edit_draft',
-    ],
-  );
+  const permitted = principal.effectivePermissions.includes('templates.create')
+    || principal.effectivePermissions.includes('templates.edit_draft');
 
   if (!permitted) {
     throw new ApiError(
@@ -1036,7 +1012,9 @@ Deno.serve(async (request) => {
         id: asset.id,
         filename: asset.original_filename,
         mimeType: asset.mime_type,
-        url: asset.id,
+        // Template renderers consume this stable authenticated gateway path;
+        // report attachments continue using the existing asset-id response.
+        url: purpose === 'template_asset' ? `/api/assets/${asset.id}` : asset.id,
       });
     }
 

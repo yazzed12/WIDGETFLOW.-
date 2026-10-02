@@ -16,6 +16,8 @@ import { matchesSearch } from '../features/search/searchMatcher';
 import { DateSearchFilter } from '../features/search/components/DateSearchFilter';
 import { matchesDateRange } from '../features/search/dateRangeFilter';
 import type { DateSearchFilterValue } from '../features/search/dateRangeFilter';
+import { belongsToOperationalSubject } from '../features/delegations/operationalWorkspaceFilters';
+import { canAuthorTemplate, canEditTemplateDraft } from '../features/delegations/effectiveAuthority';
 
 export const MyRequestsPage: React.FC = () => {
   const {
@@ -24,6 +26,10 @@ export const MyRequestsPage: React.FC = () => {
     openAddTemplateModal,
     openRequestDetail,
     submitTemplateForApproval,
+    hasOperationalPermission,
+    authorityContext,
+    isDelegatedMode,
+    operationalSubjectUserId,
   } = useApp();
 
   const [statusFilter, setStatusFilter] = useState<'All' | TemplateStatus>('All');
@@ -31,6 +37,9 @@ export const MyRequestsPage: React.FC = () => {
   const [dateFilter, setDateFilter] = useState<DateSearchFilterValue | null>(null);
 
   const requests = getMyRequestsForUser();
+  const canOpenTemplateStudio = canEditTemplateDraft(hasOperationalPermission);
+  const isOperationalOwner = (template: import('../types').WidgetTemplate) =>
+    belongsToOperationalSubject(template, operationalSubjectUserId ?? '');
 
   const filteredRequests = requests.filter((req) => {
     const matchesStatus = statusFilter === 'All' || req.status === statusFilter;
@@ -59,20 +68,24 @@ export const MyRequestsPage: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <FileText className="w-6 h-6 text-indigo-600" />
-            My Template Requests ({requests.length})
+            {isDelegatedMode ? `${authorityContext?.operationalSubject.fullName}'s Template Requests` : 'My Template Requests'} ({requests.length})
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Track report template creation requests submitted for approval, drafts, and publication status.
+            {isDelegatedMode && authorityContext
+              ? `Requests for ${authorityContext.operationalSubject.fullName} under delegated ${authorityContext.authority.roleName} authority. Available actions follow effective permissions.`
+              : 'Track report template creation requests submitted for approval, drafts, and publication status.'}
           </p>
         </div>
 
-        <button
-          onClick={() => openAddTemplateModal()}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create Report Template</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canAuthorTemplate(hasOperationalPermission) && <button
+            onClick={() => openAddTemplateModal()}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Report Template</span>
+          </button>}
+        </div>
       </div>
 
       {/* Filters & Search */}
@@ -186,7 +199,7 @@ export const MyRequestsPage: React.FC = () => {
                   <div className="flex items-center gap-1.5">
                     {req.status === 'Draft' && (
                       <>
-                        <button
+                        {isOperationalOwner(req) && canOpenTemplateStudio && <button
                           onClick={(e) => {
                             e.stopPropagation();
                             openAddTemplateModal(req);
@@ -195,8 +208,8 @@ export const MyRequestsPage: React.FC = () => {
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                           <span>Edit</span>
-                        </button>
-                        {!req.returnedAt && (
+                        </button>}
+                        {isOperationalOwner(req) && canOpenTemplateStudio && hasOperationalPermission('templates.submit') && !req.returnedAt && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -214,13 +227,13 @@ export const MyRequestsPage: React.FC = () => {
                             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
                           >
                             <Send className="w-3.5 h-3.5" />
-                            <span>Submit</span>
+                            <span>{req.returnedAt ? 'Resubmit' : 'Submit'}</span>
                           </button>
                         )}
                       </>
                     )}
 
-                    {req.status === 'Rejected' && (
+                    {isOperationalOwner(req) && req.status === 'Rejected' && canOpenTemplateStudio && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

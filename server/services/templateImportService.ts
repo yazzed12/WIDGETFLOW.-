@@ -1,28 +1,8 @@
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import { validateDynamicTemplateSchema } from './componentRegistry.js';
-import type { WidgetTemplate, TemplateComponent, TemplateSection } from '../../src/types/index.js';
+import type { ImportProposal, ImportIssue, WidgetTemplate, TemplateComponent, TemplateSection } from '../../src/types/index.js';
 import { AppError } from '../middleware/errorHandler.js';
-
-export interface ImportIssue {
-  severity: 'info' | 'warning';
-  message: string;
-  fieldKey?: string;
-}
-
-export interface ImportProposal {
-  creationMethod: 'import' | 'ai';
-  sourceFilename: string;
-  sourceType: 'docx' | 'xlsx' | 'json';
-  summary: {
-    sectionCount: number;
-    fieldCount: number;
-    tableCount: number;
-    confidence: 'High' | 'Medium' | 'Needs Review';
-  };
-  issues: ImportIssue[];
-  template: Partial<WidgetTemplate>;
-}
 
 export const templateImportService = {
   // 1. Analyze Uploaded File (DOCX / XLSX / JSON)
@@ -52,10 +32,7 @@ export const templateImportService = {
   // 2. Parse DOCX Intake Pipeline
   async analyzeDocx(buffer: Buffer, filename: string): Promise<ImportProposal> {
     const rawResult = await mammoth.extractRawText({ buffer });
-    const htmlResult = await mammoth.convertToHtml({ buffer });
-
     const rawText = rawResult.value || '';
-    const htmlText = htmlResult.value || '';
 
     const lines = rawText
       .split('\n')
@@ -126,8 +103,6 @@ export const templateImportService = {
       const colonIdx = line.indexOf(':');
       if (colonIdx !== -1 && colonIdx < 50) {
         const label = line.substring(0, colonIdx).trim();
-        const remainder = line.substring(colonIdx + 1).trim();
-
         const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || `field_${compOrder}`;
 
         let fieldType: TemplateComponent['type'] = 'text';

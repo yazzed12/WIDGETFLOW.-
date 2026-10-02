@@ -6,6 +6,11 @@ import { ApproveConfirmModal } from './ApproveConfirmModal';
 import { RejectModal } from './RejectModal';
 import { ReturnTemplateModal } from './ReturnTemplateModal';
 import { DynamicTemplateRenderer } from '../dynamic-template/DynamicTemplateRenderer';
+import { useTemplateReviewPackage } from '../../features/templates/review/useTemplateReviewPackage';
+import { TemplateReviewPackagePanel } from '../template-review/TemplateReviewPackagePanel';
+import { templateService } from '../../features/templates/services/templateService';
+import { canReviewVisibleTemplate } from '../../features/templates/templateApprovalVisibility';
+import type { TemplateTimelineEvent } from '../../features/templates/templateTimelineTypes';
 import { X, CheckCircle2, XCircle, Clock, Sparkles, User as UserIcon, Calendar, FileText, RotateCcw } from 'lucide-react';
 
 interface ApprovalDetailDrawerProps {
@@ -21,14 +26,26 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
     rejectTemplate,
     returnTemplateForRevision,
     currentUser,
-    hasPermission,
+    hasTemplateApprovalPermission,
+    isDelegatedMode,
+    authorityContext,
   } = useApp();
 
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [timeline, setTimeline] = useState<TemplateTimelineEvent[]>([]);
 
   const categoryName = categories.find((c) => c.id === template.categoryId)?.name || 'General';
+  const categoryNames = React.useMemo(() => Object.fromEntries(categories.map((category) => [category.id, category.name])), [categories]);
+  const review = useTemplateReviewPackage(template, categoryNames);
+
+  React.useEffect(() => {
+    let live = true;
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(template.id)) { setTimeline([]); return; }
+    void templateService.getTimeline(template.id).then((events) => { if (live) setTimeline(events); }).catch(() => { if (live) setTimeline([]); });
+    return () => { live = false; };
+  }, [template.id]);
 
   // Filter audit history records for this template
   const history = approvalRecords.filter((r) => r.templateId === template.id);
@@ -36,11 +53,11 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
   // The pending-approval collection is already RLS-filtered by the canonical
   // reviewer helper. A ROLE_QUEUE item may therefore be unclaimed (null
   // reviewer) and still actionable by this eligible reviewer.
-  const canReviewTemplate =
-    template.status === 'Pending Approval' &&
-    template.createdById !== currentUser.id &&
-    (!template.requestedApprovalFromUserId || template.requestedApprovalFromUserId === currentUser.id) &&
-    hasPermission('template_approvals.view');
+  const canReviewTemplate = canReviewVisibleTemplate(
+    template,
+    currentUser.id,
+    hasTemplateApprovalPermission('template_approvals.view'),
+  );
 
   const handleApproveConfirm = () => {
     approveTemplate(template.id);
@@ -118,6 +135,16 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
               )}
             </div>
 
+            <section id="template-review-package" className="space-y-2">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Submission Review Package</h3>
+              <TemplateReviewPackagePanel
+                reviewPackage={review.reviewPackage}
+                loading={review.loading}
+                baselineUnavailable={review.baselineUnavailable}
+                onViewComponent={(componentId) => document.getElementById(`approval-review-component-${componentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+              />
+            </section>
+
             {/* Visual Widget Preview */}
             <div className="space-y-2">
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -128,6 +155,7 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
                 template={template}
                 values={{}}
                 mode="readOnly"
+                componentAnchorPrefix="approval-review-component"
               />
             </div>
 
@@ -139,12 +167,17 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
               </h3>
 
               <div className="space-y-3 pl-2 border-l-2 border-slate-200">
-                {history.map((record) => (
+                {(timeline.length ? timeline.map((event) => ({
+                  id: event.id, personName: event.actorName, role: event.actorRoleName, action: event.actionLabel,
+                  comment: event.reason ?? undefined, timestamp: event.occurredAt,
+                  delegatedByName: event.delegatedByName, authorityRoleName: event.authorityRoleName,
+                })) : history).map((record) => (
                   <div key={record.id} className="relative pl-4 text-xs space-y-1">
                     <div className="absolute -left-[13px] top-1 w-2.5 h-2.5 rounded-full bg-indigo-600 ring-4 ring-white" />
                     <div className="font-bold text-slate-900">
                       {record.personName} <span className="text-slate-500 font-normal">({record.role})</span>
                     </div>
+                    {'delegatedByName' in record && record.delegatedByName && <div className="text-[11px] font-semibold text-indigo-700">Acting as {'authorityRoleName' in record ? record.authorityRoleName : ''} for {record.delegatedByName}</div>}
                     <div className="text-indigo-700 font-semibold">{record.action}</div>
                     {record.comment && (
                       <p className="text-slate-600 italic text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
@@ -156,6 +189,8 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
                 ))}
               </div>
             </div>
+
+            {isDelegatedMode && authorityContext?.delegation && <p className="px-6 pb-2 text-[11px] font-medium text-indigo-700">Acting as {authorityContext.authority.roleName} for {authorityContext.delegation.delegatedByName}; your identity remains {currentUser.name} ({currentUser.role}).</p>}
 
             {/* Request Comment Thread */}
             <div className="pt-2 border-t border-slate-200">
@@ -172,9 +207,9 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
               Close
             </button>
 
-            {canReviewTemplate && (hasPermission('template_approvals.approve') || hasPermission('template_approvals.reject')) && (
+            {canReviewTemplate && (hasTemplateApprovalPermission('template_approvals.approve') || hasTemplateApprovalPermission('template_approvals.reject')) && (
               <div className="flex items-center gap-2">
-                {hasPermission('template_approvals.reject') && <button
+                {hasTemplateApprovalPermission('template_approvals.reject') && <button
                   onClick={() => setShowRejectModal(true)}
                   className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
@@ -182,7 +217,7 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
                   <span>Reject</span>
                 </button>}
 
-                {hasPermission('template_approvals.reject') && hasPermission('template_approvals.approve') && <button
+                {hasTemplateApprovalPermission('template_approvals.reject') && <button
                   onClick={() => setShowReturnModal(true)}
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
@@ -190,7 +225,7 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({ temp
                   <span>Return for Revision</span>
                 </button>}
 
-                {hasPermission('template_approvals.approve') && <button
+                {hasTemplateApprovalPermission('template_approvals.approve') && <button
                   onClick={() => setShowApproveConfirm(true)}
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >

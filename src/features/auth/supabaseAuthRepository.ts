@@ -13,6 +13,7 @@ export type SignInResult = { session: Session; user: SupabaseAuthUser };
 export interface AuthRepository {
   signIn(credentials: LoginCredentials): Promise<SignInResult>;
   signOut(): Promise<void>;
+  currentSession(): Promise<Session | null>;
   currentPrincipal(): Promise<CurrentPrincipalRow | null>;
   onAuthStateChange(listener: AuthStateListener): () => void;
 }
@@ -31,6 +32,12 @@ export function createSupabaseAuthRepository(
     async signOut() {
       const { error } = await clientFactory().auth.signOut();
       if (error) throw error;
+    },
+
+    async currentSession() {
+      const { data, error } = await clientFactory().auth.getSession();
+      if (error) throw error;
+      return data.session;
     },
 
     async currentPrincipal() {

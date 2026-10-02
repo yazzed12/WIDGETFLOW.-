@@ -1,14 +1,5 @@
 import React from 'react';
-import type { LucideIcon } from 'lucide-react';
-
-export interface QuickAction {
-  title: string;
-  description: string;
-  icon: LucideIcon;
-  onClick: () => void;
-  visible: boolean;
-  badge?: string;
-}
+import type { QuickAction } from './quickActionModel';
 
 interface QuickActionsProps {
   actions: QuickAction[];
@@ -42,7 +33,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ actions }) => {
 
           return (
             <button
-              key={action.title}
+              key={action.id}
               type="button"
               onClick={action.onClick}
               className="group text-left rounded-lg border border-slate-200 bg-slate-50/60 p-3 transition-all hover:border-indigo-200 hover:bg-indigo-50/60 hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 cursor-pointer"

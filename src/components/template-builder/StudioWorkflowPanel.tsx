@@ -115,7 +115,7 @@ export const StudioWorkflowPanel: React.FC<StudioWorkflowPanelProps> = ({
   };
 
   return (
-    <div className="w-80 bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden select-none animate-fade-in">
+    <div className="w-full min-w-0 bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden select-none animate-fade-in">
       {/* Header */}
       <div className="p-4 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between">
         <div className="flex items-center gap-2">

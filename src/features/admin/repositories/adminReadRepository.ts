@@ -7,6 +7,8 @@ import type {
   AdminPermissionDefinition,
   AdminRoleCatalog,
 } from '../types/adminTypes';
+import type { FeatureAccessPage, FeatureRoleAccessRow, FeatureUserAccessRow } from '../../insights/featureAccessTypes';
+import { mapFeatureAccessPage, mapFeatureRoleAccessRow, mapFeatureUserAccessRow } from '../../insights/featureAccessMappers';
 
 type Row = Record<string, any>;
 
@@ -36,6 +38,22 @@ function mapAudit(row: Row): AdminAuditRecord {
 }
 
 export const adminReadRepository = {
+  async featureRoleAccess(search: string, limit: number, offset: number): Promise<FeatureAccessPage<FeatureRoleAccessRow>> {
+    const { data, error } = await getSupabaseBrowserClient().rpc('admin_list_feature_role_access', {
+      p_feature_key: 'insights', p_search: search.trim() || null, p_limit: limit, p_offset: offset,
+    });
+    if (error) throw new Error(error.message);
+    return mapFeatureAccessPage(data, mapFeatureRoleAccessRow);
+  },
+
+  async featureUserAccess(search: string, limit: number, offset: number): Promise<FeatureAccessPage<FeatureUserAccessRow>> {
+    const { data, error } = await getSupabaseBrowserClient().rpc('admin_list_feature_user_access', {
+      p_feature_key: 'insights', p_search: search.trim() || null, p_limit: limit, p_offset: offset,
+    });
+    if (error) throw new Error(error.message);
+    return mapFeatureAccessPage(data, mapFeatureUserAccessRow);
+  },
+
   async overview(): Promise<AdminOverviewSummary> {
     const { data, error } = await getSupabaseBrowserClient().rpc('admin_overview_summary');
     const value = requireData(data as Row | null, error) as Row;

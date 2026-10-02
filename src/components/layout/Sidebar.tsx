@@ -18,8 +18,13 @@ import {
   Layers,
   Activity,
   StickyNote,
+  LineChart,
+  UserRoundCog,
 } from 'lucide-react';
 import type { ViewType } from '../../types';
+import { canAccessInsights } from '../../features/insights/templateInsightsAccess';
+import { canAuthorTemplate, canCreateTemplateBackedReport } from '../../features/delegations/effectiveAuthority';
+import { selectTemplateFromLibrary } from '../../features/templates/templateSelection';
 
 export const Sidebar: React.FC = () => {
   const {
@@ -35,8 +40,15 @@ export const Sidebar: React.FC = () => {
     currentUser,
     setSelectedCategory,
     openAddTemplateModal,
+    openFillReportModal,
+    openTemplateDetail,
     sidebarOpen,
     hasPermission,
+    hasOperationalPermission,
+    hasTemplateApprovalPermission,
+    insightsAccess,
+    isDelegatedMode,
+    canOpenOperationalReadView,
   } = useApp();
 
   // Track expanded category IDs
@@ -78,21 +90,23 @@ export const Sidebar: React.FC = () => {
 
   const rawNavItems: Array<{ id: ViewType; label: string; icon: React.ReactNode; badge?: number; visible?: boolean }> = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'templates', label: 'Report Templates', icon: <Library className="w-4 h-4" />, visible: hasPermission('templates.view_approved') },
-    { id: 'my-requests', label: 'My Requests', icon: <FileText className="w-4 h-4" />, visible: hasPermission('templates.create') || hasPermission('templates.edit_own_draft') },
+    { id: 'delegations', label: 'Delegations', icon: <UserRoundCog className="w-4 h-4" /> },
+    { id: 'templates', label: 'Report Templates', icon: <Library className="w-4 h-4" />, visible: canOpenOperationalReadView('templates') },
+    { id: 'insights', label: 'Insights', icon: <LineChart className="w-4 h-4" />, visible: !isDelegatedMode && canAccessInsights(insightsAccess) },
+    { id: 'my-requests', label: 'My Requests', icon: <FileText className="w-4 h-4" />, visible: canOpenOperationalReadView('my-requests') },
     {
       id: 'approvals',
       label: 'Template Approvals',
       icon: <CheckSquare className="w-4 h-4" />,
       badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined,
-      visible: hasPermission('template_approvals.view'),
+      visible: hasTemplateApprovalPermission('template_approvals.view'),
     },
     {
       id: 'reports',
       label: 'Reports',
       icon: <FileSpreadsheet className="w-4 h-4" />,
       badge: reportsAwaitingReviewCount > 0 ? reportsAwaitingReviewCount : undefined,
-      visible: hasPermission('reports.view_own') || hasPermission('reports.view_received') || hasPermission('reports.create'),
+      visible: canOpenOperationalReadView('reports'),
     },
     {
       id: 'notifications',
@@ -105,9 +119,9 @@ export const Sidebar: React.FC = () => {
       id: 'organization-activity',
       label: 'Organization Activity',
       icon: <Activity className="w-4 h-4" />,
-      visible: hasPermission('audit_history.view'),
+      visible: !isDelegatedMode && hasPermission('audit_history.view'),
     },
-    { id: 'sticky-notes', label: 'Sticky Notes', icon: <StickyNote className="w-4 h-4" /> },
+    { id: 'sticky-notes', label: 'Sticky Notes', icon: <StickyNote className="w-4 h-4" />, visible: !isDelegatedMode },
   ];
 
   const navItems = rawNavItems.filter((item) => {
@@ -121,7 +135,7 @@ export const Sidebar: React.FC = () => {
   if (!sidebarOpen) return null;
 
   return (
-    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full border-r border-slate-800 shrink-0 select-none">
+    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full min-h-0 border-r border-slate-800 shrink-0 select-none">
       {/* Brand Header */}
       <div className="h-16 px-5 border-b border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -138,7 +152,7 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Primary Action Button */}
-      {hasPermission('templates.create') && hasPermission('studio.access') && <div className="p-4 border-b border-slate-800">
+      {canAuthorTemplate(hasOperationalPermission) && <div className="p-4 border-b border-slate-800">
         <button
           onClick={handleAddTemplateClick}
           className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
@@ -149,8 +163,8 @@ export const Sidebar: React.FC = () => {
       </div>}
 
       {/* Sidebar Navigation */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-        {hasPermission('templates.view_approved') && <div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-4 space-y-6">
+        {navItems.length > 0 && <div>
           <div className="px-3 mb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
             Navigation
           </div>
@@ -245,11 +259,15 @@ export const Sidebar: React.FC = () => {
                         catTemplates.map((tpl) => (
                           <button
                             key={tpl.id}
-                            onClick={() => {
-                              setActiveView('templates');
-                              setSelectedCategory(cat.id);
-                            }}
-                            className="w-full text-left px-2 py-1 rounded text-[11px] text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 truncate transition-colors cursor-pointer flex items-center gap-1.5"
+                            type="button"
+                            onClick={() => selectTemplateFromLibrary(
+                              tpl,
+                              canCreateTemplateBackedReport(hasOperationalPermission),
+                              openFillReportModal,
+                              openTemplateDetail,
+                            )}
+                            disabled={!hasOperationalPermission('templates.view_approved')}
+                            className="w-full text-left px-2 py-1 rounded text-[11px] text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 truncate transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-1.5"
                           >
                             <span className="w-1 h-1 rounded-full bg-emerald-400 shrink-0" />
                             <span className="truncate">{tpl.name}</span>

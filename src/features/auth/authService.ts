@@ -98,6 +98,14 @@ export function createAuthService(repository: AuthRepository) {
       return principal;
     },
 
+    async currentSession() {
+      try {
+        return await repository.currentSession();
+      } catch (error) {
+        throw new AuthFlowError('AUTH_UNAVAILABLE', error);
+      }
+    },
+
     async signOut(): Promise<void> {
       try {
         await repository.signOut();
